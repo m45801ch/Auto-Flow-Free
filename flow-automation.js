@@ -412,8 +412,22 @@
   // Auto-add voice by speaker (text2video / components2video / agent modes):
   // if a known voice name appears in the prompt, select that voice; otherwise
   // select the default voice when configured.
+  // Per-segment narration toggle: [NOVOICE] anywhere in the prompt disables
+  // TTS narration for THAT segment only, letting Veo's auto-generated voices
+  // (male/female per character) take over. The tag is stripped before the
+  // prompt is submitted so it never reaches the model.
+  function isVoiceDisabledForPrompt(text) {
+    return /\[NOVOICE\]/i.test(text || "");
+  }
+  function cleanPromptText(text) {
+    return (text || "").replace(/\[NOVOICE\]\s*/i, "");
+  }
   function tryAutoVoice(text) {
     if (!config.voiceEnabled) return;
+    if (isVoiceDisabledForPrompt(text)) {
+      log("[NOVOICE] tag found: skipping voice selection for this segment");
+      return;
+    }
     log("Auto voice requested for:", text.slice(0, 50));
     const matched = voiceNamesInText(text);
     const target = matched.length > 0 ? matched[0] : (config.defaultVoice || "");
@@ -828,7 +842,7 @@
     const textarea = findPromptTextarea();
     if (!textarea) throw new Error("prompt textarea not found");
     textarea.focus();
-    setNativeValue(textarea, item.text);
+    setNativeValue(textarea, cleanPromptText(item.text));
 
     // 3. Auto character / voice hints
     tryAutoCharacter(item.text);

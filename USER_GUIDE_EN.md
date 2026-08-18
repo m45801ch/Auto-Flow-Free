@@ -20,7 +20,7 @@
 | Live Preview Panel | Preview chained images and videos in real time; supports drag-to-reorder, manual frame replacement, automatic color-transition detection, and auto-retry on failure. |
 | One-Click Project Export | Package the entire chain (prompt settings, segment videos, last-frame images) into a ZIP download. |
 | Auto Download | Videos (720p / 1080p / 4K) and images (1K / 2K / 4K) are downloaded automatically and organized per project into their own folders. |
-| Narration Script Import | Import .txt / .csv narration scripts and auto-map each segment to its prompt; built-in 30 Google Chirp 3 HD voices. |
+| Auto Voice Assignment | Built-in Google voice modules selectable via the "Default speaker" dropdown; when enabled, the extension automatically selects a voice and fills in Flow's voice setting field, auto-matching the voice when a speaker name appears in the prompt. |
 | Character & Voice Auto-Matching | Auto-add character images based on filename and tokenized matching; voices are auto-selected when speaker names appear in prompts. |
 | Debug Log Report | Records the status of every task (upload, success, failure, retry) with an accurate log count, auto-scroll, copy, clear, and one-click export to TXT; failures are shown in red. |
 | Side Panel | Opens as a resizable split panel on the right side of the browser when you click the toolbar icon; width is adjustable by dragging. |
@@ -130,9 +130,11 @@ The **Live Preview Panel** automatically generates a copy of each segment's last
 
 ---
 
-## Narration Script Import
+## Auto Voice Assignment
 
-Save your narration script as a .txt or .csv file, then click **Import Narration** to batch-import it; the system maps each segment to the corresponding prompt in order. The built-in **Default Speaker** dropdown offers 30 Google Chirp 3 HD voices. With **Auto-add voice by speaker** enabled, speaker names mentioned in prompts are automatically matched to the corresponding voice.
+This settings block controls the **automatic filling of Flow's voice setting field** (it is unrelated to character dialogue, which is voiced automatically by Veo with male/female matching per character).
+
+The built-in Google voice modules are available in the **Default Speaker** dropdown. When **Auto-apply voice (auto-select voice by speaker)** is enabled, the extension automatically selects a voice and fills in Flow's voice setting field: if a prompt mentions a speaker name, that voice is used; otherwise the Default Speaker is used (select **None** to leave unmatched segments unset, letting Flow follow its default behavior). To skip voice assignment for a specific segment, add `[NOVOICE]` to that prompt — the segment will not receive a voice setting and Veo's auto-generated character voices will take over; the tag is removed automatically before submission.
 
 ---
 

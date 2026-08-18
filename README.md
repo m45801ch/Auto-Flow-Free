@@ -5,6 +5,52 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.31 更新重點
+
+- **「不在 Flow 專案頁面」彈窗新增任務執行提醒（三語言）**：彈窗中新增說明區塊，提醒使用者——任務執行中請保持 Flow 分頁開啟（不可關閉）；切換到其他分頁時任務仍會繼續但處理速度會變慢；關閉 Flow 分頁或讓電腦休眠會中斷任務。以警示底色區塊呈現，與彈窗主資訊區隔。
+
+## v1.9.30 更新重點
+
+- **八項 UI 樣式優化**：即時預覽面板「完成」狀態改用主題色彩變數（--success）正確顯示綠色；預覽卡片邊框改以主題變數呈現，明亮主題不再出現突兀綠線；小按鈕圓角統一為 8px；角色多選清單加 hover 背景回饋；停止按鈕文字白色；佇列長提示詞 hover 顯示完整文字；全部可點擊元素加鍵盤聚焦外框；拖曳排序手把改常駐半透明顯示，兩套主題均有對應配色。
+
+## v1.9.29 更新重點
+
+- **停用語音狀態視覺區分**：「各段秒數設定」與「自動新增角色」面板中，語音行顯示「本段不套用語音」或「依 Veo 自動生成（不套用語音）」時，改為更淺的灰色斜體樣式（兩套主題均已對應），與正常套用語音的行明顯區隔，便於快速識別。
+
+## v1.9.28 更新重點
+
+- **語音行顯示明確標示為「旁白語音」**：「各段秒數設定」與「自動新增角色」面板的語音行，改為「🎙 旁白語音：Achernar · 男」等格式，一眼即可區分此為旁白（TTS）語音、與 Veo 自動生成的角色對話聲音（男女聲自動配對）無關；使用「預設說話者」時附「（預設）」標記（三語言同步）。
+
+## v1.9.27 更新重點
+
+- **清除殘留的「旁白稿」錯誤文案（三語言）**：「匯入旁白稿」功能早已刪除（與匯入提示詞合併），但介面說明仍有「唸旁白稿」等錯誤描述。全面修正：開關改為「**自動套用語音（按說話者自動選語音）**」，說明改為「自動選擇語音並填入 Flow 的語音設定欄位……角色對話的聲音由 Veo 自動生成（男女聲自動配對），與此設定無關」；語音行顯示文案中的「旁白」也一併改為「語音」（例如「依 Veo 自動生成（不套用語音）」）。
+
+## v1.9.25 更新重點
+
+- **「預設說話者」下拉選單新增「無」選項**：下拉最上方新增「無（不套用語音）」選項，選取後未命中的段落不設定語音，由 Flow 依內建行為處理，設定更彈性。
+
+## v1.9.24 更新重點
+
+- **分段語音彈性切換（[NOVOICE] 標籤）**：在任何段落的提示詞中加入 `[NOVOICE]`，該段即不套用語音設定（不填入 Flow 的語音欄位），由 Veo 自動生成角色聲音接管（男女聲依角色自動配對）；標籤會於送出前自動清除，不會出現在影片中。其餘段落仍正常套用語音設定。
+- **無語音設定時的明確提示**：未設定預設說話者且提示詞無命中語音時，語音行改為顯示「依 Veo 自動生成（不套用語音）」，清楚告知該段將由 Veo 自動配音。
+- **佇列即時標記**：含有 `[NOVOICE]` 的段落，在即時佇列列表中會顯示 `[NOVOICE]` 標記，方便確認哪些段落不套用語音。
+
+## v1.9.23 更新重點
+
+- **自動新增角色配對顯示改為分行顯示**：每段提示詞下方現在分兩行顯示——第一行顯示命中的角色（附縮圖），第二行顯示該段使用的語音（🎙 說話者名稱，無命中時顯示預設說話者），版面更清晰易讀。
+
+## v1.9.22 更新重點
+
+- **自動新增角色自動掃描與配對顯示**：打勾「自動新增角色」後，擴充自動抓取 Flow 頁面上的角色並依提示詞配對，顯示「已自動匹配 N 個角色」與各段提示詞命中的角色名稱（附縮圖）；不在 Flow 頁面時自動切回手動模式並提示。
+
+## v1.9.21 更新重點
+
+- 各段秒數設定面板加強：貼入 Prompts 分段解析後，每段即時顯示命中的角色名稱（附角色縮圖）與該段將使用的語音（含性別、語調），與內容腳本的匹配邏輯完全一致；支援語音的頁面顯示語音行，角色名單或下拉勾選變更時即時重繪。
+
+
+## v1.9.20 更新重點
+- 修復「偵數轉影片」頁籤的「圖片處理選項」下拉：之前選「首幀／首尾幀／全部」不會保存與生效，現在切換後立即保存設定，內容腳本依選擇實際套用（保留第一段的最後一幀／保留第一與最後一段的最後一幀／保留每段最後一幀）
+
 ## v1.9.19 更新重點
 - 「文字轉影片」模式支援連鎖生成（Chain Prompt）：開啟連鎖後，每段生成時自動切換到 Flow 的「幀數轉影片」面板，將上一段影片的最後一格畫面作為下一段的輸入圖片，生成完成後自動切回「文字轉影片」面板。介面全程停留在文字轉影片操作，連鎖即時預覽、色彩過渡偵測、自動重試與斷點續跑均照常運作
 - 面板切換按鈕支援繁體中文、簡體中文與英文三種 Flow 介面
@@ -112,7 +158,7 @@ GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-
 | 每个 prompt 的最大输入图片数 Max input images per prompt | A 1–10 image dropdown for Image-to-Image / Components-to-Video / Agent modes; input images are distributed to prompts in groups of the chosen size |
 | 自动添加角色图片 Auto-add character images | Image-to-Image / Components-to-Video / Agent modes: images whose file name matches a character name mentioned in the prompt are prioritized as the segment's input (may exceed the max-images limit so that all matched character images are included) |
 | 全宽可调整界面 Full-width resizable panel | The popup fills the browser window width, aligns to the top-right, and can be resized freely (resize handle at the bottom-right) |
-| 旁白稿批次匯入 Narration script import | Import a narration script via「导入旁白稿 .txt / .csv」; each segment is automatically mapped to its matching prompt (TXT: segments separated by blank lines; CSV: automatic header detection with a robust quoted-comma parser) and appended to the corresponding prompt before submission; a mismatch hint is shown when segment and prompt counts differ, and「✕ 移除旁白稿」clears the import |
+| ~~旁白稿批次匯入~~ (已移除) | 此功能已與「匯入提示詞 .txt / .csv」合併；現以單一按鈕處理所有文字匯入，不再獨立的旁白稿匯入按鈕 |
 | Outputs per prompt | 1–4 videos/images per prompt |
 | Save to folder | Sub-folder naming for downloads |
 | Auto rename | Automatically rename downloaded files |
