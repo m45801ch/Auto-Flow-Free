@@ -660,7 +660,7 @@ function renderPreview() {
   const card = document.getElementById("previewCard");
   const grid = document.getElementById("previewGrid");
   const empty = document.getElementById("emptyPreview");
-  const isChain = (settings.mode === "frame2video" || settings.mode === "text2video") && !!document.getElementById("chainToggle").checked;
+  const isChain = settings.mode === "frame2video" && !!document.getElementById("chainToggle").checked;
   card.classList.toggle("hidden", !isChain);
   grid.innerHTML = "";
   const cells = new Map();
@@ -1492,6 +1492,11 @@ function bindUI() {
     window.open("https://github.com", "_blank");
   });
   document.getElementById("btnClearCache").addEventListener("click", () => {
+    // 清除快取：連鎖斷點、即時預覽幀/影片
+    sessionFrames = [];
+    sessionVideos = [];
+    clearCheckpoint();
+    renderPreview();
     toast(t("toastCacheCleared"));
   });
   document.getElementById("btnClear").addEventListener("click", () => {
@@ -1511,6 +1516,7 @@ function bindUI() {
   updateModeUI();
   loadModePrompts();
   updateQueueFromPrompts();
+  ensureQueueProgressTicker();
   applyI18n();
   showNotFlowWarning();
 }
@@ -1518,10 +1524,8 @@ function bindUI() {
 // ---------------- Mode UI ----------------
 function updateModeUI() {
   const isFrame = settings.mode === "frame2video";
-  // Chain Prompt is supported in both Frames-to-Video and Text-to-Video. For
-  // text2video, the content script temporarily switches Flow's UI to the
-  // Frames-to-Video panel so each segment's last frame can be attached.
-  const supportsChain = settings.mode === "frame2video" || settings.mode === "text2video";
+  // Chain Prompt（連鎖生成）僅支援「幀數轉影片」；文字轉影片不提供連鎖生成。
+  const supportsChain = settings.mode === "frame2video";
   const needsUploadZone = settings.mode !== "text2video" && settings.mode !== "text2image";
   const isImage = settings.mode === "text2image" || settings.mode === "image2image";
   const isImg2Img = settings.mode === "image2image";
@@ -1821,7 +1825,7 @@ function parsePrompts() {
 
 function updateQueueFromPrompts() {
   const prompts = parsePrompts();
-  queue = prompts.map((text, i) => ({ id: i, text, status: "pending", duration: getPerPromptDuration(i) }));
+  queue = prompts.map((text, i) => ({ id: i, text, status: "pending", progress: 0, duration: getPerPromptDuration(i) }));
   renderQueue();
   updatePerPromptDurList();
 }
@@ -1846,10 +1850,12 @@ function renderQueue() {
     const fullText = q.text;
     const truncated = fullText.length > 120 ? fullText.slice(0, 120) + "…" : fullText;
     const segOff = isVoiceDisabledForPrompt && isVoiceDisabledForPrompt(q.text);
+    const pct = q.status === "done" ? 100 : (q.progress || 0);
     item.innerHTML =
       '<div class="queue-num">#' + (i + 1) + '</div>' +
       '<div class="queue-text" title="' + escapeHtml(fullText) + '">' + escapeHtml(truncated) + (segOff ? ' <span class="queue-segoff" title="' + t("voiceSegOff") + '">[NOVOICE]</span>' : '') + '</div>' +
-      '<div class="queue-status ' + q.status + '">' + statusLabel(q.status) + '</div>';
+      '<div class="queue-status ' + q.status + '">' + statusLabel(q.status) + '</div>' +
+      '<div class="queue-progress"><div class="queue-progress-fill" style="width:' + pct + '%"></div><span class="queue-progress-text">' + pct + '%</span></div>';
     list.appendChild(item);
   });
 }
@@ -1866,12 +1872,37 @@ function updateItem(id, status) {
   const q = queue.find(x => x.id === id);
   if (!q) return;
   q.status = status;
+  if (status === "done") q.progress = 100;
+  else if (status === "error" || status === "pending" || status === "retrying") q.progress = 0;
   const el = document.getElementById("qitem-" + id);
   if (el) {
     const st = el.querySelector(".queue-status");
     st.className = "queue-status " + status;
     st.textContent = statusLabel(status);
+    setItemProgress(el, q.progress || 0);
   }
+}
+
+// ---- 佇列進度百分比條 ----
+// 每個 running 條目每秒推進進度（封頂 95%），done 顯示 100%、error 顯示 0%。
+let queueProgressTimer = null;
+function ensureQueueProgressTicker() {
+  if (queueProgressTimer) return;
+  queueProgressTimer = setInterval(() => {
+    queue.forEach(q => {
+      if (q.status === "running" && (q.progress || 0) < 95) {
+        q.progress = Math.min(95, (q.progress || 0) + 2);
+        const el = document.getElementById("qitem-" + q.id);
+        if (el) setItemProgress(el, q.progress);
+      }
+    });
+  }, 1000);
+}
+function setItemProgress(el, pct) {
+  const fill = el.querySelector(".queue-progress-fill");
+  const txt = el.querySelector(".queue-progress-text");
+  if (fill) fill.style.width = pct + "%";
+  if (txt) txt.textContent = pct + "%";
 }
 
 // ---------------- Character scan ----------------
@@ -1912,7 +1943,9 @@ function scanFlowCharactersInject() {
     // characters (e.g. "PRO" from the account avatar with a PRO badge).
     // Real character names are filename-like: 4+ chars; short badge words (PRO,
     // FREE, ...) are blocked by the explicit list below.
-    if (s.length < 4) return false;
+    // 中文名稱（含 CJK）允許 2 個字元起（如「小美」），英文仍須 4+ 以避免誤收短標籤。
+    const hasCJK = /[\u4e00-\u9fff]/.test(s);
+    if (s.length < (hasCJK ? 2 : 4)) return false;
     if (/^pro$|^free$|^premium|^admin$|^user$|^guest$|^plus$|^test0?$|^beta$|^demo$|^new$/i.test(s)) {
       // Allow "test" ONLY if it actually came from a character panel image card
       // (the panel scan pass sets add-from-panel marker); page-wide passes block it.
@@ -1954,9 +1987,9 @@ function scanFlowCharactersInject() {
         let name = "";
         const tokens = cardText.split(/[\s,，、;；|\/]+/).filter(w => w.length > 0);
         for (const w of tokens) {
-          if (/^[A-Za-z0-9][A-Za-z0-9_\-]{2,30}$/i.test(w) && isValidName(w, true)) { name = w; break; }
+          if (/^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(w) && isValidName(w, true)) { name = w; break; }
         }
-        if (!name && /^[A-Za-z0-9][A-Za-z0-9_\-]{2,30}$/i.test(alt)) name = alt;
+        if (!name && /^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(alt)) name = alt;
         if (!name) name = alt || cardText;
         if (isValidName(name, true)) add(name, img.src);
       });
@@ -1967,7 +2000,7 @@ function scanFlowCharactersInject() {
     document.querySelectorAll("img[src]").forEach(img => {
       const alt = (img.getAttribute("alt") || "").trim();
       if (!alt) return;
-      if (/^[A-Za-z0-9][A-Za-z0-9_\-]{1,30}$/i.test(alt) && isValidName(alt, false)) add(alt, img.src);
+      if (/^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(alt) && isValidName(alt, false)) add(alt, img.src);
     });
   } catch (e) { /* ignore */ }
   // Strategy 4: character selector dialog / picker
@@ -2451,9 +2484,14 @@ async function startBatch(resumeIndex) {
     return;
   }
 
+  // 及早鎖定，避免快速重複點擊造成多次 START_BATCH（導致多個 runBatch 並行）
+  running = true;
+  document.getElementById("btnRun").classList.add("hidden");
+  document.getElementById("btnStop").classList.remove("hidden");
+
   // Auto-detect resumable checkpoint in chain mode
   let effResume = resumeIndex !== undefined ? resumeIndex : 0;
-  if (!effResume && (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) {
+  if (!effResume && settings.mode === "frame2video" && settings.chainEnabled) {
     const cp = tryDetectCheckpoint();
     if (cp) {
       const doneCount = queue.filter(q => q.status === "done").length;
@@ -2465,11 +2503,12 @@ async function startBatch(resumeIndex) {
   }
 
   const tab = await ensureFlowTab();
-  if (!tab) return;
-
-  running = true;
-  document.getElementById("btnRun").classList.add("hidden");
-  document.getElementById("btnStop").classList.remove("hidden");
+  if (!tab) {
+    running = false;
+    document.getElementById("btnRun").classList.remove("hidden");
+    document.getElementById("btnStop").classList.add("hidden");
+    return;
+  }
 
   // Merge checkpoint frames (previous chain last-frame copies) into uploaded frames
   let framesForConfig = uploadedFrames.map(f => ({ name: f.name, dataUrl: f.dataUrl }));
@@ -2481,7 +2520,7 @@ async function startBatch(resumeIndex) {
 
   const config = {
     mode: settings.mode,
-    concurrency: (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled ? 1 : settings.concurrency,
+    concurrency: settings.mode === "frame2video" && settings.chainEnabled ? 1 : settings.concurrency,
     waitMin: settings.waitMin,
     waitMax: settings.waitMax,
     frames: framesForConfig,
@@ -2534,7 +2573,15 @@ function stopBatch() {
   running = false;
   document.getElementById("btnRun").classList.remove("hidden");
   document.getElementById("btnStop").classList.add("hidden");
-  const isChainMode = (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled;
+  // 通知內容腳本停止批次——只改 UI 不會停，worker 會繼續跑完整個佇列
+  try {
+    chrome.tabs.query({ url: "https://labs.google/fx/*tools/flow*" }).then(tabs => {
+      if (tabs && tabs[0]) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: "STOP_BATCH" }).catch(() => {});
+      }
+    }).catch(() => {});
+  } catch (e) { /* ignore */ }
+  const isChainMode = settings.mode === "frame2video" && settings.chainEnabled;
   if (isChainMode) {
     saveCheckpoint();
     toast(t("checkpointSaved"));
@@ -2554,8 +2601,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         running = false;
         document.getElementById("btnRun").classList.remove("hidden");
         document.getElementById("btnStop").classList.add("hidden");
-        if ((settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) saveCheckpoint();
-      } else if ((settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) {
+        if (settings.mode === "frame2video" && settings.chainEnabled) saveCheckpoint();
+      } else if (settings.mode === "frame2video" && settings.chainEnabled) {
         saveCheckpoint();
       }
     }

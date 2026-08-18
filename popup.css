@@ -324,8 +324,9 @@ textarea#prompts {
   background: var(--input-bg);
   border: 1px solid var(--card-border);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 8px 10px 14px;
   display: flex; align-items: flex-start; gap: 8px;
+  position: relative;
 }
 .queue-num { color: var(--accent); font-weight: 700; font-size: 11px; margin-top: 1px; }
 .queue-text { flex: 1; font-size: 12px; word-break: break-word; }
@@ -337,6 +338,20 @@ textarea#prompts {
   white-space: nowrap; margin-left: 4px; vertical-align: middle;
 }
 [data-theme="light"] .queue-segoff { background: rgba(0,0,0,.06); }
+.queue-progress {
+  position: absolute; left: 8px; right: 8px; bottom: 3px;
+  height: 4px; border-radius: 2px; overflow: hidden;
+  background: var(--pending-bg);
+}
+.queue-progress-fill {
+  height: 100%; width: 0; border-radius: 2px;
+  background: var(--accent);
+  transition: width .4s ease;
+}
+.queue-progress-text {
+  position: absolute; right: 1px; bottom: 5px;
+  font-size: 9px; line-height: 1; color: var(--text-dim);
+}
 .queue-status {
   font-size: 10px; padding: 2px 8px; border-radius: 10px;
   background: var(--pending-bg); color: var(--text-dim); white-space: nowrap;

@@ -23,6 +23,14 @@
       config = msg.config;
       queue = msg.queue;
       stopped = false;
+      // The script is injected into all frames (allFrames), so every frame
+      // receives START_BATCH. Only the frame that actually contains the prompt
+      // textarea should run the batch — other frames would fail with "prompt
+      // textarea not found" and interfere with the real submission.
+      if (!findPromptTextarea()) {
+        log("START_BATCH ignored: no prompt textarea in this frame");
+        return;
+      }
       // Restore resumed chain frame (from popup checkpoint) as initial input
       if (config.resumeIndex > 0 && config.frames && config.frames.length) {
         const fr = config.frames[0];
@@ -47,6 +55,14 @@
 
   // --------------- Utility: set native input value ---------------
   function setNativeValue(el, value) {
+    // Flow 偶爾會改用 contentEditable 富文字編輯器當作 prompt 輸入框
+    if (el && el.isContentEditable) {
+      el.focus();
+      el.textContent = value;
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
     const proto = el instanceof HTMLTextAreaElement
       ? HTMLTextAreaElement.prototype
       : HTMLInputElement.prototype;
@@ -59,6 +75,11 @@
   // --------------- Click helpers ---------------
   function click(el) {
     if (!el) return false;
+    // 同時派發 pointer + mouse 事件與原生 click，增加 React/Flow 處理的相容性
+    try {
+      el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true }));
+    } catch (e) { /* PointerEvent 不支援時略過 */ }
     el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     el.click();
@@ -84,12 +105,69 @@
 
   // --------------- Element finders (Google Flow UI) ---------------
   function findPromptTextarea() {
-    return document.querySelector("textarea[placeholder*='rompt'], textarea");
+    const all = Array.from(document.querySelectorAll(
+      "textarea, [contenteditable='true'], [contenteditable='plaintext-only'], [contenteditable='']"
+    ));
+    const isVisible = el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 &&
+        getComputedStyle(el).visibility !== "hidden" &&
+        getComputedStyle(el).display !== "none";
+    };
+    const visible = all.filter(isVisible);
+    const attrs = (el) =>
+      (el.getAttribute("placeholder") || "") + " " +
+      (el.getAttribute("aria-label") || "") + " " +
+      (el.getAttribute("data-testid") || "") + " " +
+      (el.getAttribute("title") || "");
+    // 1) 可見且屬性含 prompt 關鍵字 → 最可能是真正的提示詞輸入框
+    const byKeyword = visible.filter(el => /rompt|提示|描述|Describe|Prompt|prompt/i.test(attrs(el)));
+    if (byKeyword.length > 0) return byKeyword[0];
+    // 2) 可見的 contentEditable（Flow 可能用富文字編輯器）
+    const ce = visible.find(el => el.isContentEditable);
+    if (ce) return ce;
+    // 3) 可見且有非空 placeholder
+    const withPh = visible.filter(el => (el.getAttribute("placeholder") || "").trim());
+    if (withPh.length > 0) return withPh[0];
+    // 4) 任一可見輸入框
+    if (visible.length > 0) return visible[0];
+    return all[0] || null;
   }
 
   function findSubmitButton() {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    return buttons.find(b => /generate|生成|create/i.test(b.textContent)) || buttons[buttons.length - 1];
+    // 只考慮可見且未停用的按鈕，避免點到隱藏的 UI 按鈕
+    const isVisibleBtn = b => {
+      const r = b.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return false;
+      if (b.disabled || b.getAttribute("aria-disabled") === "true") return false;
+      return true;
+    };
+    // Flow 的送出/生成按鈕標籤涵蓋中英文：生成、產生、送出、提交、執行、建立、Generate、Create、Submit、Run…
+    const labelRe = /generate|生成|產生|送出|提交|執行|建立|create|submit|run/i;
+    const describe = b => (b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
+
+    // 1) 優先從提示詞輸入框附近的按鈕找（同在一個 dialog/panel 內）
+    const ta = findPromptTextarea();
+    if (ta) {
+      let node = ta;
+      for (let i = 0; node && i < 6; i++) {
+        node = node.parentElement;
+        if (!node) break;
+        const nearby = Array.from(node.querySelectorAll("button, [role='button']"))
+          .filter(isVisibleBtn)
+          .find(b => labelRe.test(b.textContent || ""));
+        if (nearby) {
+          log("Submit button (near prompt):", describe(nearby));
+          return nearby;
+        }
+      }
+    }
+
+    // 2) 全頁搜尋可見按鈕
+    const buttons = Array.from(document.querySelectorAll("button, [role='button']")).filter(isVisibleBtn);
+    const btn = buttons.find(b => labelRe.test(b.textContent || "")) || buttons[buttons.length - 1];
+    log("Submit button:", btn ? describe(btn) : "none");
+    return btn || null;
   }
 
   function findAspectRatioButtons() {
@@ -106,24 +184,38 @@
   // Chain generation for text2video works by temporarily switching Flow's UI to
   // the Frames-to-Video panel (which accepts an input image = last frame), so we
   // need reliable buttons to switch panels. Labels cover Traditional Chinese,
-  // Simplified Chinese and English Flow UIs.
+  // Simplified Chinese and English Flow UIs (含變體：幀轉影片 / 帧转视频 / 從幀轉換…).
   const MODE_BUTTON_LABELS = {
     text2video: ["文字轉影片", "文字转视频", "Text to Video"],
-    frame2video: ["幀數轉影片", "帧数转视频", "Frames to Video"]
+    frame2video: [
+      "幀數轉影片", "幀轉影片", "帧数转视频", "帧转视频", "從幀轉換", "从帧转换",
+      "Frames to Video", "Frame to Video", "Frame2Video", "Frame to video"
+    ]
   };
   function findModeSwitchButton(modeKey) {
     const labels = MODE_BUTTON_LABELS[modeKey] || [];
-    const candidates = Array.from(document.querySelectorAll("button, [role='button'], nav a, a[href]"));
+    const candidates = Array.from(document.querySelectorAll(
+      "button, [role='button'], [role='tab'], [role='radio'], nav a, a[href], " +
+      "[data-testid*='mode'], [data-testid*='tab'], [class*='mode'], [class*='tab']"
+    ));
+    // 1) Exact text match
     for (const label of labels) {
       const el = candidates.find(c => (c.textContent || "").trim() === label);
       if (el) return el;
     }
-    // Fallback: partial match (e.g. a label with extra whitespace or decoration)
+    // 2) Partial text match (e.g. a label with extra whitespace or decoration)
     for (const label of labels) {
       const el = candidates.find(c => (c.textContent || "").trim().includes(label));
       if (el) return el;
     }
-    return null;
+    // 3) Attribute keywords (aria-label / data-testid / title)
+    const kw = modeKey === "frame2video" ? /frame|幀|帧/i : /text|文字|文本/i;
+    const el = candidates.find(c => kw.test(
+      (c.getAttribute("aria-label") || "") + " " +
+      (c.getAttribute("data-testid") || "") + " " +
+      (c.getAttribute("title") || "")
+    ));
+    return el || null;
   }
   // Click the Flow UI button that switches to the given video panel, then wait
   // for the panel to re-render. Returns true on success.
@@ -131,6 +223,15 @@
     const el = findModeSwitchButton(modeKey);
     if (!el) {
       logError("Mode switch failed: button not found for", modeKey);
+      // 除錯：列出頁面上的候選按鈕文字，方便定位 Flow 的實際標籤
+      try {
+        const seen = Array.from(document.querySelectorAll("button, [role='button'], [role='tab'], [role='radio'], nav a, a[href]"))
+          .map(c => (c.textContent || "").replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .slice(0, 30);
+        log("Available UI labels:", JSON.stringify(seen));
+      } catch (e) { /* ignore */ }
       return false;
     }
     log("Switching Flow panel to", modeKey);
@@ -142,12 +243,18 @@
 
   // --------------- Select dropdown option ---------------
   function selectByText(text) {
-    const els = Array.from(document.querySelectorAll("*")).filter(
+    // 1) leaf 元素精確比對（名稱本身是獨立文字）
+    const leaves = Array.from(document.querySelectorAll("*")).filter(
       el => el.children.length === 0 && (el.textContent || "").trim() === text);
-    for (const el of els) {
-      click(el);
-      return true;
-    }
+    for (const el of leaves) { if (click(el)) return true; }
+    // 2) 可點擊元素（button/option/tab/radio/li）精確比對，處理含子元素的選項
+    const clickables = Array.from(document.querySelectorAll(
+      "button, [role='button'], [role='option'], [role='tab'], [role='radio'], li, a"
+    )).filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && (el.textContent || "").trim() === text;
+    });
+    for (const el of clickables) { if (click(el)) return true; }
     return false;
   }
 
@@ -252,6 +359,58 @@
   }
 
   // --------------- Configure generation options ---------------
+  // 除錯輔助：收集頁面上可見元素的文字標籤
+  function optionLabels(limit = 40) {
+    const seen = [];
+    Array.from(document.querySelectorAll("button, [role='button'], [role='option'], [role='tab'], [role='radio'], li"))
+      .forEach(el => {
+        const r = el.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) return;
+        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (t && t.length < 40 && seen.indexOf(t) === -1) seen.push(t);
+      });
+    return seen.slice(0, limit);
+  }
+  function logOptionCandidates(desc, els, limit = 20) {
+    try {
+      const seen = [];
+      (els || []).forEach(el => {
+        const t = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (t && seen.indexOf(t) === -1) seen.push(t);
+      });
+      log(desc, JSON.stringify(seen.slice(0, limit)));
+    } catch (e) { /* ignore */ }
+  }
+
+  // 切換 Flow 輸入框下方的「影片/圖片」輸出模式開關。
+  // kind: "video" | "image"。若停在錯誤模式，對應選項（比例、模型、時長）不會出現。
+  function ensureOutputMode(kind) {
+    const isVisible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const norm = s => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const btns = Array.from(document.querySelectorAll("button, [role='button'], [role='tab'], [role='radio']")).filter(isVisible);
+    const videoRe = /video|視頻|影片|視訊|動畫/i;
+    const imageRe = /image|圖片|照片|画|畫像/i;
+    const target = btns.find(el => {
+      const t = norm(el.textContent);
+      const al = norm(el.getAttribute("aria-label") || "");
+      const isVideo = videoRe.test(t) || videoRe.test(al);
+      const isImage = imageRe.test(t) || imageRe.test(al);
+      if (kind === "video") return isVideo && !isImage;
+      return isImage && !isVideo;
+    });
+    if (target) {
+      const active = target.getAttribute("aria-pressed") === "true" ||
+        target.getAttribute("aria-selected") === "true" ||
+        target.classList.contains("active") ||
+        target.classList.contains("selected");
+      if (!active) { click(target); log("Switched output to", kind, "mode"); }
+      else log("Already in", kind, "mode");
+      return true;
+    }
+    log(kind, "mode toggle not found. Toggle candidates:", JSON.stringify(btns.map(b => norm(b.textContent) || norm(b.getAttribute("aria-label") || "")).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).slice(0, 20)));
+    return false;
+  }
+
   function setAspect() {
     if (!config.aspect) return;
     const btns = findAspectRatioButtons();
@@ -262,6 +421,7 @@
         return;
       }
     }
+    logOptionCandidates("Aspect not found. Ratio candidates:", btns);
   }
 
   function setModel() {
@@ -277,6 +437,7 @@
     };
     const label = map[config.model] || config.model;
     if (selectByText(label)) log("Model set to", label);
+    else log("Model not found in UI:", label, "available:", JSON.stringify(optionLabels(15)));
   }
 
   // Image model selector (Nano Banana Pro / 2 / 2 Lite) for image modes
@@ -318,6 +479,78 @@
     for (const c of candidates) {
       if (selectByText(c)) { log("Duration set to", c); return; }
     }
+    log("Duration not found:", candidates[0], "available:", JSON.stringify(optionLabels(15)));
+  }
+
+  // --------------- 新增命中的素材（按輸入框右下角的「+」） ---------------
+  // 開啟 Flow 的素材/角色選擇器，把 prompt 中命中的角色名稱對應的項目點選加入。
+  // 每一步都盡量安全：找不到就略過，開啟後無法完成就按 Escape 關閉，避免卡住流程。
+  async function tryAddMatchedAssets(text) {
+    const chars = charsInText(text);
+    if (chars.length === 0) {
+      log("No character/asset names matched in prompt, skipping add-asset step");
+      return;
+    }
+    const ta = findPromptTextarea();
+    if (!ta) return;
+    const pressEscape = () => {
+      try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) { /* ignore */ }
+    };
+    // 1) 在提示詞輸入框附近找「+」按鈕
+    let plus = null;
+    let node = ta;
+    for (let i = 0; node && i < 6; i++) {
+      node = node.parentElement;
+      if (!node) break;
+      plus = Array.from(node.querySelectorAll("button, [role='button']")).find(b => {
+        const r = b.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) return false;
+        const t = (b.textContent || "").trim();
+        const al = (b.getAttribute("aria-label") || "") + " " + (b.getAttribute("title") || "");
+        return t === "+" || /add|新增|添加|加入|attach|素材|asset|character/i.test(t + " " + al);
+      });
+      if (plus) break;
+    }
+    if (!plus) { log("Add-asset (+) button not found near prompt"); return; }
+    click(plus);
+    log("Clicked add-asset (+) button");
+    await sleep(1500);
+    // 2) 尋找開啟的選擇器容器
+    const picker = Array.from(document.querySelectorAll("dialog, [role='dialog'], [aria-modal='true'], [class*='picker'], [class*='asset'], [class*='library']"))
+      .find(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    if (!picker) { log("Asset picker container not found after clicking +"); pressEscape(); return; }
+    // 3) 依角色名稱點選匹配的項目
+    const norm = s => (s || "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    let clickedCount = 0;
+    for (const name of chars) {
+      const nn = norm(name);
+      const items = Array.from(picker.querySelectorAll("button, [role='button'], [role='option'], li, img, [class*='card']"));
+      const hit = items.find(el => {
+        const t = norm(el.textContent);
+        const al = norm(el.getAttribute("alt") || "") + " " + norm(el.getAttribute("aria-label") || "");
+        return t === nn || t.split(/[\s,，、;；|\/]+/).includes(nn) || al === nn;
+      });
+      if (hit) {
+        click(hit);
+        clickedCount++;
+        await sleep(300);
+        log("Added asset:", name);
+      }
+    }
+    if (clickedCount === 0) {
+      log("No matching asset items in picker for:", JSON.stringify(chars));
+      pressEscape();
+      return;
+    }
+    // 4) 確認並關閉選擇器
+    const confirmBtn = Array.from(picker.querySelectorAll("button")).find(b => {
+      const t = (b.textContent || "").replace(/\s+/g, " ").trim();
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && /完成|確定|新增|加入|送出|Done|Add|Insert/i.test(t) && !/取消|close|關閉/i.test(t);
+    });
+    if (confirmBtn) { click(confirmBtn); log("Confirmed asset picker"); }
+    else { log("Picker confirm button not found; pressing Escape"); pressEscape(); }
+    await sleep(500);
   }
 
   // --------------- Frame handling ---------------
@@ -665,12 +898,33 @@
     return new Set(Array.from(document.querySelectorAll("video, img")).map(m => m.src || m.currentSrc));
   }
 
+  // 判斷某個 media 是否真的是要下載的生成結果，排除縮圖/頭像/redirect 端點等垃圾
+  function shouldDownloadMedia(url, el) {
+    if (!url) return false;
+    // 跳過明顯非結果的網址
+    if (/redirect|getMediaUrl|avatar|profile|icon|emoji|placeholder/i.test(url)) return false;
+    if (/=(?:s|w|h)\d{1,4}(?:-c)?([?&]|$)/i.test(url)) return false; // Google 縮圖尺寸（=s96-c 等）
+    const u = url.split("?")[0];
+    if (el && el.tagName === "VIDEO") {
+      if (/^blob:/i.test(url)) return true;
+      if (el.videoWidth > 0 && el.duration > 0) return true;
+      return false;
+    }
+    // 圖片：需真實圖片副檔名且尺寸夠大（排除小縮圖）
+    if (/\.(png|jpe?g|webp|gif)$/i.test(u)) {
+      const w = (el && (el.naturalWidth || el.width)) || 0;
+      if (w >= 200) return true;
+    }
+    return false;
+  }
+
   function observeResults(item) {
     // Observe the DOM for newly generated media to auto-download
     const observer = new MutationObserver(() => {
       document.querySelectorAll("video, img").forEach(media => {
         const url = media.src || media.currentSrc;
         if (!url || downloadUrls.has(url)) return;
+        if (!shouldDownloadMedia(url, media)) return;
         downloadUrls.add(url);
         autoDownload(url, item);
       });
@@ -689,10 +943,14 @@
     let finalUrl = await trySelectResolution(url, isImage, targetRes);
 
     const folder = config.folder || "veo-folder-1";
+    // 依「儲存到資料夾」設定建立子資料夾路徑（a.download 支援 / 路徑，Chrome 會自動建資料夾）
+    const safeFolder = folder.replace(/[\\/:*?"<>|]/g, "_").trim() || "veo-folder-1";
     let filename = (finalUrl || url).split("/").pop().split("?")[0] || `flow-${item.id}`;
     if (config.rename) {
       const ext = filename.split(".").pop() || (isImage ? "png" : "mp4");
-      filename = `${folder}_${item.id + 1}.${ext}`;
+      filename = `${safeFolder}/${item.id + 1}.${ext}`;
+    } else {
+      filename = `${safeFolder}/${filename}`;
     }
     try {
       await fetch(finalUrl || url)
@@ -782,21 +1040,15 @@
 
   // --------------- Process one prompt ---------------
   async function processOne(item) {
+    if (stopped) throw new Error("stopped");
     reportItemStatus(item.id, "running");
     const mediaBefore = snapshotMedia();
 
-    // 0a. Chain mode: switch Flow UI to the Frames-to-Video panel, which accepts
-    // an input image (the previous segment's last frame). A text2video chain
-    // runs through that panel so the chain frame can be attached automatically.
-    if (config.chainEnabled && config.mode === "text2video") {
-      if (await switchMode("frame2video") === false) {
-        logError("Cannot switch to frames panel; chain generation aborted for item", item.id);
-        throw new Error("mode switch failed");
-      }
-    }
+    // 0a. Chain mode (frame2video only): 連鎖生成僅支援幀數轉影片。
+    // 文字轉影片不提供連鎖生成，無需切換面板。
 
     // 0b. Chain Prompt: append the previous video's last frame as input image
-    if (config.chainEnabled && (config.mode === "frame2video" || config.mode === "text2video")) {
+    if (config.chainEnabled && config.mode === "frame2video") {
       if (chainLastFrame) {
         log("Chain: uploading last frame of the previous video for item", item.id);
         const ok = await uploadFrames([chainLastFrame]);
@@ -841,32 +1093,44 @@
     // 2. Fill prompt
     const textarea = findPromptTextarea();
     if (!textarea) throw new Error("prompt textarea not found");
+    log("Prompt input:", textarea.tagName, "ce=" + textarea.isContentEditable, "placeholder=" + JSON.stringify(textarea.getAttribute("placeholder") || ""));
     textarea.focus();
     setNativeValue(textarea, cleanPromptText(item.text));
 
     // 3. Auto character / voice hints
     tryAutoCharacter(item.text);
     tryAutoVoice(item.text);
+    // 3b. 按輸入框右下角的「+」新增 prompt 中命中的素材
+    await tryAddMatchedAssets(item.text);
 
     // 4. Set options
     await sleep(800);
+    // 依模式切換 Flow 的輸出模式（影片/圖片），否則對應選項不會出現
+    const isImageMode = config.mode === "text2image" || config.mode === "image2image";
+    ensureOutputMode(isImageMode ? "image" : "video");
+    await sleep(400);
     setAspect();
     await sleep(300);
-    setModel();
-    await sleep(300);
-    if (config.mode === "text2image" || config.mode === "image2image") {
+    if (isImageMode) {
+      // 圖片模式：圖片模型與來源
       if (config.imageModel) setImageModel();
       await sleep(300);
       if (config.imageMode) setImageMode();
       await sleep(300);
+    } else {
+      // 影片模式（文字轉影片/幀數轉影片/組件轉影片/智慧體自動化）：影片模型
+      setModel();
+      await sleep(300);
     }
     setOutputs(parseInt(config.outputCount) || 1);
     await sleep(300);
-    // Per-prompt duration override: use the segment's individual duration if set,
-    // otherwise fall back to the global default (config.duration).
-    const sec = (item && item.duration) || config.duration;
-    if (sec) setDuration(sec);
-    await sleep(500);
+    if (!isImageMode) {
+      // Per-prompt duration override: use the segment's individual duration if set,
+      // otherwise fall back to the global default (config.duration). 圖片無時長。
+      const sec = (item && item.duration) || config.duration;
+      if (sec) setDuration(sec);
+      await sleep(500);
+    }
 
     // 5. Submit
     const submit = findSubmitButton();
@@ -881,7 +1145,7 @@
     await sleep(10000);
 
     // 8. Chain Prompt: capture the last frame of the newly generated video
-    if (config.chainEnabled && (config.mode === "frame2video" || config.mode === "text2video")) {
+    if (config.chainEnabled && config.mode === "frame2video") {
       try {
         const media = await waitForResult(60000);
         if (media) {
@@ -960,11 +1224,6 @@
       } catch (e) {
         log("Chain frame capture skipped:", e.message);
       }
-      // 0c. Chain started from text2video: switch back to the Text-to-Video panel
-      // so the UI stays consistent for the next segment (and for the user).
-      if (config.chainEnabled && config.mode === "text2video") {
-        await switchMode("text2video");
-      }
     }
   }
 
@@ -1023,12 +1282,16 @@
     const MAX_FAIL_RETRIES = 2;
     let lastErr = null;
     for (let attempt = 0; attempt <= MAX_FAIL_RETRIES; attempt++) {
+      if (stopped) {
+        log("Stop requested — aborting item", item.id);
+        return { ok: false, err: new Error("stopped") };
+      }
       try {
         await processOne(item);
         return { ok: true };
       } catch (err) {
         lastErr = err;
-        if (attempt < MAX_FAIL_RETRIES) {
+        if (attempt < MAX_FAIL_RETRIES && !stopped) {
           logError("Item", item.id, "failed (attempt", attempt + 1 + "), retrying after random wait:", err.message);
           reportItemStatus(item.id, "retrying");
           await sleep(sleepRand());
