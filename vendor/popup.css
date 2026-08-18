@@ -99,8 +99,11 @@ body {
 .version-badge {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text);
-  padding: 2px 0;
+  color: var(--accent);
+  border: 1px solid var(--card-border);
+  background: var(--badge-bg, rgba(255, 179, 71, 0.1));
+  padding: 2px 7px;
+  border-radius: 4px;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -772,41 +775,7 @@ textarea#prompts {
 .notflow-btn:hover { background: var(--accent-hover); }
 
 /* Character multi-select list (v1.9.8) */
-select.disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 #charMultiCard { margin-bottom: 2px; }
-.card-label.multi-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-}
-.icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-.icon-btn:hover { color: var(--accent); background: rgba(255, 179, 71, 0.15); }
-#charMultiList.collapsed { display: none; }
-.caret-icon.collapsed { transform: rotate(180deg); }
-/* Multiple-select character dropdown */
-select[multiple] {
-  min-height: 38px;
-  max-height: 150px;
-  overflow-y: auto;
-}
-select[multiple] option {
-  padding: 3px 8px;
-}
 .char-multi-item {
   display: flex;
   align-items: center;

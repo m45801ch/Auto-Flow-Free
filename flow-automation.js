@@ -420,7 +420,12 @@
   }
   function charsInText(text) {
     const p = norm(text);
-    const allNames = (config.charNames || []).map(n => (n || "").trim()).filter(Boolean);
+    // User-selected character pool from the multi-select scan list takes priority;
+    // fall back to ALL scanned names when nothing is checked (previous behavior).
+    const pool = (config.charSelected && config.charSelected.length > 0)
+      ? config.charSelected
+      : (config.charNames || []);
+    const allNames = pool.map(n => (n || "").trim()).filter(Boolean);
     return allNames
       .map(n => (n || "").trim())
       .filter(n => {
@@ -725,7 +730,7 @@
       if (config.imageMode) setImageMode();
       await sleep(300);
     }
-    setOutputs(config.outputCount);
+    setOutputs(parseInt(config.outputCount) || 1);
     await sleep(300);
     // Per-prompt duration override: use the segment's individual duration if set,
     // otherwise fall back to the global default (config.duration).

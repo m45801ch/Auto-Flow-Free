@@ -169,7 +169,6 @@ const i18n = {
     dragHandleTitle: "拖曳調整順序",
     toastFileSkip: "%N1% 超過 50MB，已跳過",
     toastScanFail: "掃描失敗：%N1%",
-    toastLeaveFlow: "流程執行中請勿離開 Flow 頁面，否則流程可能中斷！",
     toastStartFail: "啟動失敗：%N1%",
     toastCopyFail: "複製失敗，請手動選擇複製。",
     statusPending: "等待中", statusRunning: "執行中", statusDone: "已完成", statusError: "失敗", statusRetrying: "重試中",
@@ -347,7 +346,6 @@ const i18n = {
     dragHandleTitle: "Drag to reorder",
     toastFileSkip: "%N1% exceeds 50MB, skipped",
     toastScanFail: "Scan failed: %N1%",
-    toastLeaveFlow: "Please stay on the Flow page while processing — leaving may interrupt the flow!", 
     toastStartFail: "Failed to start: %N1%",
     toastCopyFail: "Copy failed. Please select and copy manually.",
     statusPending: "Pending", statusRunning: "Running", statusDone: "Done", statusError: "Failed", statusRetrying: "Retrying",
@@ -524,7 +522,6 @@ const i18n = {
     dragHandleTitle: "拖拽调整顺序",
     toastFileSkip: "%N1% 超过 50MB，已跳过",
     toastScanFail: "扫描失败：%N1%",
-    toastLeaveFlow: "流程执行中请勿离开 Flow 页面，否则流程可能中断！", 
     toastStartFail: "启动失败：%N1%",
     toastCopyFail: "复制失败，请手动选择复制。",
     statusPending: "等待中", statusRunning: "运行中", statusDone: "已完成", statusError: "失败", statusRetrying: "重试中",
@@ -977,7 +974,7 @@ function loadSettings() {
     charImageEnabled: false,
     voiceEnabled: false,
     defaultVoice: "",
-    outputCount: 1,
+    outputCount: 2,
     folder: "veo-folder-1",
     rename: true,
     aspect: "16:9",
@@ -1048,7 +1045,7 @@ function rebuildCharOptions() {
   if (!select) return;
   const prev = select.value;
   const names = Array.from(select.options).map(o => o.value).filter(v => v && v !== "__none__");
-  select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option>';
+  select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option><option value="__none__" data-i18n="optCharUnavailable">' + t("optCharUnavailable") + '</option>';
   names.forEach(n => {
     const opt = document.createElement("option");
     opt.value = n;
@@ -1195,28 +1192,6 @@ function bindUI() {
   });
   document.getElementById("scanChars").addEventListener("click", scanCharacters);
   updateCharScanState();
-
-  // Character multi-select: card checkboxes ⟷ dropdown (bidirectional sync)
-  document.getElementById("charSelect").addEventListener("change", onCharSelectMultiChange);
-
-  // Scanned-character card collapse/expand
-  const multiToggle = document.getElementById("charMultiToggle");
-  if (multiToggle) {
-    const multiList = document.getElementById("charMultiList");
-    const multiHeader = document.getElementById("charMultiHeader");
-    multiToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const collapsed = multiList.classList.toggle("collapsed");
-      multiToggle.querySelector(".caret-icon").classList.toggle("collapsed", collapsed);
-      multiToggle.setAttribute("title", collapsed ? "展開" : "收合");
-      if (multiHeader) multiHeader.setAttribute("title", collapsed ? "展開" : "收合");
-    });
-    // Clicking the header toggles as well
-    if (multiHeader) multiHeader.addEventListener("click", (e) => {
-      if (e.target.closest("button")) return;
-      multiToggle.click();
-    });
-  }
 
   // Max input images per prompt
   const maxImg = document.getElementById("maxImages");
@@ -1644,102 +1619,76 @@ async function scanCharacters() {
       func: () => {
         const chars = []; // { name, src }
         const seen = new Set();
-        function add(name, src, fromPanel = false) {
+        function add(name, src) {
           const key = String(name || "").trim().toLowerCase();
           if (!key || seen.has(key)) return;
           seen.add(key);
           chars.push({ name: String(name).trim(), src: src || "" });
         }
-        function isValidName(n, fromPanel = false) {
+        function isValidName(n) {
           if (!n) return false;
           const s = String(n).trim();
           if (s.length === 0 || s.length > 60) return false;
           // Panel/section titles & UI action names are NOT characters
           if (/^(新建|添加|新增|create|add|new|upload|delete|remove|close|more|options|edit|share|menu|settings|home|角色|characters?|characters list|character list|character panel|角色列表)$/i.test(s)) return false;
           // Non-character UI elements that must never be collected
-          // (user feedback: 用户头像, 生成概念图, 制作视觉情绪板, Learn about generation costs,
-          //  帶我了解你能做什麼 — Flow 對話面板的建議選項，絕非角色)
-          if (/用户头像|用户头象|头像|生成概念|制作视觉|情绪板|视觉情绪|learn about generation|concept art|mood board|概念图|情緒板|帶我了解你能做什麼|帶我瞭解你能做什麼|learn what you can do|what you can create|帶我認識|我能做/i.test(s)) return false;
-          // Guard against account avatars & AI suggestion cards
-          // (e.g. "account_pro" avatar, "suggest_1") — UI names with these prefixes
-          // are never user-created characters, regardless of where they appear.
-          if (/^(account|user|avatar|profile|suggest|ai_|suggestion)/i.test(s)) return false;
-          if (!fromPanel && /_(pro|free|premium|avatar|suggested)$/i.test(s)) return false;
-          // Flow "add new character" buttons carry accessibility labels like
-          // "accessibility_newjade_disc" (aria-label prefix) — never user-created roles
-          if (/^accessibility_/.test(s) || /accessibility_new/i.test(s)) return false;
+          // (user feedback: 用户头像, 生成概念图, 制作视觉情绪板, Learn about generation costs)
+          if (/用户头像|用户头象|头像|生成概念|制作视觉|情绪板|视觉情绪|learn about generation|concept art|mood board|概念图|情緒板/i.test(s)) return false;
           // AI assistant / tool panels: cards whose text is dominated by AI action phrases
           if (/(^|\n|\s)(生成|制作|创作|创作图|Learn about|learn about)/i.test(s) && !/^[A-Za-z0-9][A-Za-z0-9_\-]*$/.test(s)) return false;
-          // Account avatar / PRO badge / single-word short labels are never user-created
-          // characters (e.g. "PRO" from the account avatar with a PRO badge).
-          // Real character names are filename-like: 4+ chars; short badge words (PRO,
-          // FREE, ...) are blocked by the explicit list below.
-          if (s.length < 4) return false;
-          if (/^pro$|^free$|^premium|^admin$|^user$|^guest$|^plus$|^test0?$|^beta$|^demo$|^new$/i.test(s)) {
-            // Allow "test" ONLY if it actually came from a character panel image card
-            // (the panel scan pass sets add-from-panel marker); page-wide passes block it.
-            if (!fromPanel) return false;
-          }
           return true;
         }
-        // ---- Locate the user-created character panel(s) ----
-        // A character panel: container whose aria-label/title/textContent mentions
-        // 角色/character and actually contains image cards. Everything else is ignored.
+        // ---- Locate ONLY the user-created character panel(s) ----
+        // A character panel is a container whose aria-label/title/textContent mentions
+        // 角色/character(s) and actually contains image cards. Everything else is ignored.
         const panels = [];
         try {
-          document.querySelectorAll("[aria-label*='角色'], [aria-label*='character' i], [aria-label*='characters' i], [title*='角色'], [title*='character' i], [title*='characters' i], [data-testid*='character'], [class*='character']").forEach(el => {
+          document.querySelectorAll("[aria-label*='角色'], [aria-label*='character' i], [aria-label*='characters' i], [title*='角色'], [title*='character' i], [title*='characters' i], [data-testid*='character']").forEach(el => {
             if (!el.querySelector("img[src]")) return;
-            // The panel's own visible label (标题) may contain 角色/character — check only
-            // the header-level element (h1..h4, first heading, aria-label), NOT every
-            // nested span/div, otherwise the right-side AI assistant dialog is matched too.
-            const header = el.querySelector("h1,h2,h3,h4");
-            const headerText = header ? " " + header.textContent : "";
-            const al = (el.getAttribute("aria-label") || "") + " " + (el.getAttribute("title") || "") + headerText;
+            // The panel's own label text must contain the section keyword
+            const al = (el.getAttribute("aria-label") || el.getAttribute("title") || "");
             if (/角色|character/i.test(al)) panels.push(el);
           });
         } catch (e) { /* ignore */ }
-        // Strategy 1 (panel-scoped, HIGHEST priority): imgs inside character panels —
-        // the card name comes from the same card element as the image. The panel title
-        // itself is a section header, not a character. Card text can be noisy (timestamps,
-        // extra labels) so we split it into tokens and prefer the token that looks like
-        // the character's filename, falling back to alt text.
+        // Strategy 1: imgs inside character panels — card name comes from the SAME
+        // card element as the image; the panel title itself is a section header, not a character.
         panels.forEach(panel => {
           try {
             panel.querySelectorAll("img[src]").forEach(img => {
               const card = img.closest("figure, li, div");
-              if (!card) return;
-              // A real card: the image must be a direct visual child of the card element
-              const cardImgs = Array.from(card.querySelectorAll("img[src]"));
-              if (cardImgs.length === 0 || cardImgs[0] !== img) return;
               const alt = (img.getAttribute("alt") || "").trim();
               const cardText = (card?.textContent || "").replace(/\s+/g, " ").trim();
-              let name = "";
-              // Prefer a filename-like token inside the card text (handles cards whose
-              // visible text is noisy, e.g. "12:02  lin_cat  57.26" mixed lines)
-              const tokens = cardText.split(/[\s,，、;；|\/]+/).filter(w => w.length > 0);
-              for (const w of tokens) {
-                if (/^[A-Za-z0-9][A-Za-z0-9_\-]{2,30}$/i.test(w) && isValidName(w, true)) {
-                  name = w; break;
-                }
+              // Name priority: filename-like alt > card text minus img's own alt repetition
+              let name = alt || "";
+              if (!name) {
+                name = cardText;
+                // card text often equals the alt; avoid collecting the title text of the panel
+                if (name === alt) name = "";
               }
-              if (!name && /^[A-Za-z0-9][A-Za-z0-9_\-]{2,30}$/i.test(alt)) name = alt;
-              if (!name) name = alt || cardText;
-              if (isValidName(name, true)) add(name, img.src);
+              if (isValidName(name)) add(name, img.src);
             });
           } catch (e) { /* ignore */ }
         });
-        // Strategy 2 (page-wide, safety-filtered): filename-like alt text anywhere on
-        // the page — catches user-created character cards whose names are stored as
-        // filenames (e.g. "lin_cat"). The isValidName exclude list filters UI elements
-        // (用户头像, 生成概念图, mood board buttons, ...).
-        try {
-          document.querySelectorAll("img[src]").forEach(img => {
-            const alt = (img.getAttribute("alt") || "").trim();
-            if (!alt) return;
-            if (/^[A-Za-z0-9][A-Za-z0-9_\-]{1,30}$/i.test(alt) && isValidName(alt, false)) add(alt, img.src);
-          });
-        } catch (e) { /* ignore */ }
-        // Strategy 4: character selector dialog / picker (when Flow opens character picker)
+        // Strategy 2: filename-like alt text — ONLY when the img lives inside a
+        // character panel (never a page-wide scan; that was the source of UI-element leakage)
+        panels.forEach(panel => {
+          try {
+            panel.querySelectorAll("img[src]").forEach(img => {
+              const alt = (img.getAttribute("alt") || "").trim();
+              if (!alt) return;
+              if (/^[A-Za-z0-9][A-Za-z0-9_\-]{1,30}$/i.test(alt) && isValidName(alt)) add(alt, img.src);
+            });
+            // Label-like buttons inside the panel
+            panel.querySelectorAll("button, [role='button'], a").forEach(btn => {
+              const label = (btn.getAttribute("aria-label") || btn.textContent || "").replace(/\s+/g, " ").trim();
+              if (isValidName(label) && label.length < 40 && !/角色|character|新增|add|create|新建/i.test(label)) {
+                const img = btn.querySelector("img[src]");
+                add(label, img ? img.src : null);
+              }
+            });
+          } catch (e) { /* ignore */ }
+        });
+        // Strategy 3: character selector dialog / picker (when Flow opens character picker)
         try {
           document.querySelectorAll("dialog img[src], [role='dialog'] img[src], [aria-modal='true'] img[src], [class*='character-picker'] img[src]").forEach(img => {
             const name = (img.closest("div,li")?.textContent || "").replace(/\s+/g, " ").trim();
@@ -1760,7 +1709,7 @@ async function scanCharacters() {
       dedup.push({ name: String(c.name).trim(), src: c.src || "" });
     });
     const select = document.getElementById("charSelect");
-    select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option>';
+    select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option><option value="__none__" data-i18n="optCharUnavailable">' + t("optCharUnavailable") + '</option>';
     dedup.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.name;
@@ -1810,7 +1759,6 @@ function renderCharMultiList(chars) {
       const names = Array.from(list.querySelectorAll("input[type='checkbox']")).filter(i => i.checked).map(i => i.value);
       settings.charSelected = names;
       saveSettings();
-      syncCharSelectFromMulti(names);
     });
     const nameSpan = document.createElement("span");
     nameSpan.textContent = c.name;
@@ -1825,32 +1773,6 @@ function renderCharMultiList(chars) {
     }
     list.appendChild(item);
   });
-  // Dropdown: multiple-select synced with the card checkboxes
-  syncCharSelectFromMulti(settings.charSelected);
-}
-
-// 掃描卡片與下拉選單多選雙向同步：勾選名單 → 下拉的 option 勾選狀態同步更新
-function syncCharSelectFromMulti(names) {
-  const sel = document.getElementById("charSelect");
-  if (!sel) return;
-  Array.from(sel.options).forEach(o => {
-    o.selected = !!(o.value && o.value !== "__none__" && names.includes(o.value));
-  });
-}
-
-// 下拉多選變更 → 同步回掃描卡片與 charSelected
-function onCharSelectMultiChange() {
-  const sel = document.getElementById("charSelect");
-  const list = document.getElementById("charMultiList");
-  if (!sel) return;
-  const names = Array.from(sel.selectedOptions).map(o => o.value).filter(v => v && v !== "__none__");
-  settings.charSelected = names;
-  saveSettings();
-  if (list) {
-    list.querySelectorAll("input[type='checkbox']").forEach(cb => {
-      cb.checked = names.includes(cb.value);
-    });
-  }
 }
 
 // ---------------- Character scan state (auto-match vs scan) ----------------
@@ -1858,7 +1780,6 @@ function onCharSelectMultiChange() {
 function updateCharScanState() {
   const btn = document.getElementById("scanChars");
   const hint = document.getElementById("charHint");
-  const sel = document.getElementById("charSelect");
   if (!btn || !hint) return;
   const span = btn.querySelector("span");
   if (settings.charEnabled) {
@@ -1866,14 +1787,11 @@ function updateCharScanState() {
     btn.classList.add("disabled");
     if (span) span.textContent = t("scanAutoMatched");
     hint.textContent = t("scanAutoMatched");
-    // Auto-match is ON → the default-character dropdown must not be used
-    if (sel) { sel.disabled = true; sel.classList.add("disabled"); }
   } else {
     btn.disabled = false;
     btn.classList.remove("disabled");
     if (span) span.textContent = t("btnScanChars");
     hint.textContent = t("hintCharScan");
-    if (sel) { sel.disabled = false; sel.classList.remove("disabled"); }
   }
 }
 
@@ -1886,21 +1804,7 @@ let notFlowCheckTimer = null;
 async function showNotFlowWarning() {
   const modal = document.getElementById("notFlowModal");
   if (!modal) return;
-  let isFlowProject = false;
-  try {
-    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-      // v1.9.1 已驗證的成功實作：直接查詢目前活動分頁網址（tabs 權限在 side panel 可用）；
-      // 支援任何語言路徑：/fx/tools/flow、/fx/zh/tools/flow、/fx/en/tools/flow 等
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const url = tabs[0]?.url || "";
-      isFlowProject = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
-    } else {
-      isFlowProject = false;
-    }
-  } catch (e) {
-    isFlowProject = false;
-  }
-  const willLock = !isFlowProject;
+  const willLock = await detectNotFlow();
   modal.classList.toggle("hidden", !willLock);
   document.body.classList.toggle("notflow-locked", willLock);
   // 鎖定期間攔截鍵盤操作（防止 Tab/Enter/Space 操作底層 UI）
@@ -1911,21 +1815,12 @@ async function showNotFlowWarning() {
   let lastFlowState = willLock;
   notFlowCheckTimer = setInterval(async () => {
     try {
-      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const url = tabs[0]?.url || "";
-        const onFlow = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
-        const shouldLock = !onFlow;
-        if (shouldLock !== lastFlowState) {
-          lastFlowState = shouldLock;
-          modal.classList.toggle("hidden", !shouldLock);
-          document.body.classList.toggle("notflow-locked", shouldLock);
-          notFlowLocked = shouldLock;
-          // 批次任務執行中離開 Flow 頁面：提示使用者不可離開，否則流程會中斷
-          if (shouldLock && running) {
-            toast(t("toastLeaveFlow"));
-          }
-        }
+      const shouldLock = await detectNotFlow();
+      if (shouldLock !== lastFlowState) {
+        lastFlowState = shouldLock;
+        modal.classList.toggle("hidden", !shouldLock);
+        document.body.classList.toggle("notflow-locked", shouldLock);
+        notFlowLocked = shouldLock;
       }
     } catch (e) { /* ignore */ }
   }, 1000);
@@ -1942,48 +1837,23 @@ document.addEventListener("wheel", e => {
   if (notFlowLocked && !e.target.closest("#notFlowModal")) e.preventDefault();
 }, { passive: false, capture: true });
 
-// 共用偵測：不在 Flow 專案頁面時傳回 true（應鎖定）。
-// 主要走 background service worker（有 tabs 權限，不受 side panel 視窗限制）；
-// file:// 預覽模式則回退到本頁的直接查詢。
+// 共用偵測：不在 Flow 專案頁面時傳回 true（應鎖定）
 async function detectNotFlow() {
-  let bgReplied = false;
-  let bgResult = null;
-  try {
-    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-      // 直接查詢 background service worker（權威來源）；以超時包裝防止 SW 休眠導致訊息掛起
-      bgResult = await new Promise((resolve) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (!settled) { settled = true; resolve(null); }
-        }, 1500);
-        try {
-          chrome.runtime.sendMessage({ type: "QUERY_FLOW_STATE" }, (reply) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolve((reply && typeof reply.isOnFlow === "boolean") ? reply.isOnFlow : null);
-          });
-        } catch (e) {
-          settled = true;
-          clearTimeout(timer);
-          resolve(null);
-        }
-      });
-      if (bgResult !== null) { bgReplied = true; return !bgResult; }
-    }
-  } catch (e) { /* not in extension context */ }
   try {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      // Side panel 是獨立 window，不限定 currentWindow 查詢所有活動分頁，
+      // 排除 chrome-extension://（面板自身）後判斷：
+      // 任一活動分頁在 Flow 上，或目前有任何 Flow 分頁存在，即視為可用。
       const tabs = await chrome.tabs.query({ active: true });
       const extTabs = (tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
       const anyTab = extTabs[0]?.url || "";
       const onActive = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(anyTab);
-      const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*/tools/flow*" });
+      const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*tools/flow*" });
       return !(onActive || flowTabs.length > 0);
     }
   } catch (e) { /* ignore */ }
   // Preview mode (file://) 或查詢失敗：一律視為不在 Flow（安全預設）
-  return !bgReplied;
+  return true;
 }
 
 // 啟動後立即偵測一次，之後每 1 秒持續輪詢分頁切換狀態（離開 Flow 會重彈、切回 Flow 會自動解除）
@@ -1993,25 +1863,6 @@ async function detectNotFlow() {
 try {
   if (typeof chrome !== "undefined" && chrome.windows && chrome.windows.onFocusChanged) {
     chrome.windows.onFocusChanged.addListener(() => { try { showNotFlowWarning(); } catch (e) { /* ignore */ } });
-  }
-} catch (e) { /* ignore */ }
-
-// 接收 background 主動廣播的 Flow 狀態（tabs.onUpdated / onFocusChanged 觸發），
-// 面板常駐時也能即時同步：不在 Flow 時重彈、切回 Flow 時自動解除
-try {
-  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((msg) => {
-      try {
-        if (msg && msg.type === "FLOW_STATE" && typeof msg.isOnFlow === "boolean") {
-          const modal = document.getElementById("notFlowModal");
-          if (!modal) return;
-          const shouldLock = !msg.isOnFlow;
-          modal.classList.toggle("hidden", !shouldLock);
-          document.body.classList.toggle("notflow-locked", shouldLock);
-          notFlowLocked = shouldLock;
-        }
-      } catch (e) { /* ignore */ }
-    });
   }
 } catch (e) { /* ignore */ }
 

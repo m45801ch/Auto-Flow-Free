@@ -61,17 +61,17 @@ Once installed, click the puzzle icon in the Chrome toolbar and **pin** Auto Flo
 ### 1. Text-to-Video
 
 1. Select **Text to Video** in the Control tab.
-2. Paste prompts into the input box (separate segments with blank lines), or click **Upload .txt file** / **Upload .xlsx / .csv** to import.
+2. Paste prompts into the input box (separate segments with blank lines), or click **Import prompts .txt / .csv** to import a file.
 3. Configure video length in Settings (4s / 6s / 8s / 10s / 4s-merge / 6s-merge).
 4. Click **Run** to start batch generation.
 
 > **Example prompts** (two segments separated by a blank line):
 > ```
-> A serene sunset over a calm ocean with gentle waves,
-> the camera slowly panning across the horizon.
+> In a misty mountain valley at dawn, a flock of white sheep slowly
+> crosses a hanging bridge as the camera pushes forward along it.
 >
-> A bustling city street at night with neon lights,
-> cars and pedestrians moving through the scene.
+> On an old railway in the afternoon sun, a vintage steam locomotive
+> whistles around a bend, golden light washing over its carriages.
 > ```
 
 ### 2. Frame-to-Video
