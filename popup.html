@@ -25,7 +25,7 @@
       </div>
     </div>
       <div class="top-right">
-      <span class="version-badge" id="versionBadge" title="Auto Flow Free">v1.9.3</span>
+      <span class="version-badge" id="versionBadge" title="Auto Flow Free">v1.9.4</span>
       <a class="topbtn" id="openRepo" href="https://github.com/m45801ch/Auto-Flow-Free" target="_blank" rel="noopener" data-i18n-title="repoTitle">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
         <span data-i18n="repoLabel">GitHub</span>
@@ -177,6 +177,18 @@
       </div>
       <textarea id="prompts" data-i18n-placeholder="promptsPlaceholder"></textarea>
       <div class="hint" id="promptsHint" data-i18n="hintPrompts">用空行分隔每個 prompt。</div>
+    </div>
+
+    <!-- Per-prompt duration panel -->
+    <div class="card dur-card hidden" id="perDurCard">
+      <div class="dur-header">
+        <div class="dur-title">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          <span data-i18n="labelPerPromptDur">各段秒數設定</span>
+        </div>
+      </div>
+      <div class="hint" data-i18n="hintPerPromptDur">為每段 Prompt 單獨設定影片秒數；未特別指定的段落使用上方「預設影片長度」。</div>
+      <div class="dur-body" id="perDurList"></div>
     </div>
 
     <!-- Character auto-add -->

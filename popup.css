@@ -327,6 +327,29 @@ textarea#prompts {
 [data-theme="light"] .queue-status.done { background: rgba(219,109,148,.14); }
 .queue-status.error { background: var(--danger-bg); color: var(--danger); }
 
+/* ---------- Per-prompt duration panel ---------- */
+.dur-header { display: flex; align-items: center; gap: 6px; }
+.dur-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px; }
+.dur-title svg { color: var(--text-dim); }
+.dur-body { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-height: 220px; overflow-y: auto; }
+.dur-row {
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.dur-num { color: var(--accent); font-weight: 700; font-size: 11px; white-space: nowrap; }
+.dur-text { flex: 1; font-size: 11.5px; color: var(--text-dim); word-break: break-word; line-height: 1.4; }
+.dur-text b { color: var(--text); font-weight: 600; }
+.dur-select {
+  width: 104px;
+  font-size: 11.5px;
+  padding: 6px 4px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 /* ---------- Live preview & resume panel ---------- */
 .preview-card {
   background: var(--card);

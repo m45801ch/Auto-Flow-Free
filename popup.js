@@ -182,6 +182,10 @@ const i18n = {
     statusPending: "等待中", statusRunning: "執行中", statusDone: "已完成", statusError: "失敗", statusRetrying: "重試中",
     narrLabel: "旁白：",
     uploadHintZh: "PNG, JPG, GIF 每個大小不超過 50MB",
+    labelPerPromptDur: "各段秒數設定",
+    hintPerPromptDur: "為每段 Prompt 單獨設定影片秒數；未特別指定的段落使用上方「預設影片長度」。",
+    perDurGlobal: "跟隨預設",
+    perDurSec: "秒",
   },
 
   en: {
@@ -364,6 +368,10 @@ const i18n = {
     statusPending: "Pending", statusRunning: "Running", statusDone: "Done", statusError: "Failed", statusRetrying: "Retrying",
     narrLabel: "Narration: ",
     uploadHintZh: "PNG, JPG, GIF each under 50MB",
+    labelPerPromptDur: "Per-prompt duration",
+    hintPerPromptDur: "Set the video duration for each prompt individually. Segments without a specific value use the default duration above.",
+    perDurGlobal: "Use default",
+    perDurSec: "s",
   },
   "zh-CN": {
     tabControl: "控制", tabSettings: "设置",
@@ -545,6 +553,10 @@ const i18n = {
     statusPending: "等待中", statusRunning: "运行中", statusDone: "已完成", statusError: "失败", statusRetrying: "重试中",
     narrLabel: "旁白：",
     uploadHintZh: "PNG, JPG, GIF 每个大小不超过 50MB",
+    labelPerPromptDur: "各段秒数设置",
+    hintPerPromptDur: "为每段 Prompt 单独设置视频时长；未特别指定的段落使用上方「默认视频选项」。",
+    perDurGlobal: "跟随默认",
+    perDurSec: "秒",
   },
 };
 let currentLang = "zh-TW";
@@ -835,6 +847,18 @@ function moveSegment(from, to) {
     const map = new Map(queue.map((q, i) => [q.id, i]));
     const newText = queue.map(q => parts[map.get(q.id)] || "").join("\n\n");
     promptsEl.value = newText;
+    // Reorder this mode's per-prompt durations to follow the new segment order
+    if (settings.promptDurations && settings.promptDurations[settings.mode]) {
+      const durMap = settings.promptDurations[settings.mode];
+      const newDur = {};
+      queue.forEach((q, newIdx) => {
+        const oldIdx = map.get(q.id);
+        if (oldIdx !== undefined && durMap[String(oldIdx)] !== undefined) {
+          newDur[String(newIdx)] = durMap[String(oldIdx)];
+        }
+      });
+      settings.promptDurations[settings.mode] = newDur;
+    }
     saveSettings();
   }
   renderPreview();
@@ -1045,6 +1069,8 @@ function loadSettings() {
     duration: "8",
     lang: "zh-TW",
     theme: "light",
+    modePrompts: {},
+    promptDurations: {},
   };
   return Object.assign({}, def, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
 }
@@ -1172,7 +1198,10 @@ function bindUI() {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+      // 儲存當前模式的提示詞，再切換到新模式並載入該模式的提示詞
+      saveCurrentModePrompts();
       settings.mode = btn.dataset.mode;
+      loadModePrompts();
       saveSettings();
       updateModeUI();
     });
@@ -1200,7 +1229,10 @@ function bindUI() {
 
   // Prompts textarea
   const promptsEl = document.getElementById("prompts");
-  promptsEl.addEventListener("input", updateQueueFromPrompts);
+  promptsEl.addEventListener("input", () => {
+    saveCurrentModePrompts();
+    updateQueueFromPrompts();
+  });
 
   // File uploads
   document.getElementById("fileTxt").addEventListener("change", e => {
@@ -1209,6 +1241,7 @@ function bindUI() {
     const reader = new FileReader();
     reader.onload = () => {
       promptsEl.value = (promptsEl.value ? promptsEl.value.trim() + "\n\n" : "") + reader.result.trim();
+      saveCurrentModePrompts();
       updateQueueFromPrompts();
     };
     reader.readAsText(file);
@@ -1225,6 +1258,7 @@ function bindUI() {
       // drop header if exists
       const lines = rows.slice(1).map(r => r.split(",")[0]).filter(r => r);
       promptsEl.value = (promptsEl.value ? promptsEl.value.trim() + "\n\n" : "") + lines.join("\n\n");
+      saveCurrentModePrompts();
       updateQueueFromPrompts();
     };
     reader.readAsText(file);
@@ -1320,7 +1354,7 @@ function bindUI() {
   const dlResSel = document.getElementById("downloadRes");
   if (dlResSel) { dlResSel.value = settings.downloadRes; dlResSel.addEventListener("change", e => { settings.downloadRes = e.target.value; saveSettings(); }); }
   document.getElementById("durationSelect").value = String(settings.duration);
-  document.getElementById("durationSelect").addEventListener("change", e => { settings.duration = e.target.value; saveSettings(); });
+  document.getElementById("durationSelect").addEventListener("change", e => { settings.duration = e.target.value; saveSettings(); updatePerPromptDurList(); });
   const imgModelSel = document.getElementById("imageModelSelect");
   if (imgModelSel) { imgModelSel.value = settings.imageModel; imgModelSel.addEventListener("change", e => { settings.imageModel = e.target.value; saveSettings(); }); }
   const defModeSel = document.getElementById("defaultModeSelect");
@@ -1462,6 +1496,7 @@ function bindUI() {
   });
   document.getElementById("btnClear").addEventListener("click", () => {
     promptsEl.value = "";
+    saveCurrentModePrompts();
     uploadedFrames = [];
     renderUploadedFrames();
     updateQueueFromPrompts();
@@ -1475,6 +1510,7 @@ function bindUI() {
   document.getElementById("btnStop").addEventListener("click", stopBatch);
 
   updateModeUI();
+  loadModePrompts();
   updateQueueFromPrompts();
   applyI18n();
   showNotFlowWarning();
@@ -1558,6 +1594,77 @@ function renderUploadedFrames() {
   });
 }
 
+// ---------------- Per-mode prompts (each mode keeps its own prompt text) ----------------
+function saveCurrentModePrompts() {
+  const promptsEl = document.getElementById("prompts");
+  if (!promptsEl) return;
+  if (!settings.modePrompts) settings.modePrompts = {};
+  settings.modePrompts[settings.mode] = promptsEl.value;
+}
+function loadModePrompts() {
+  const promptsEl = document.getElementById("prompts");
+  if (!promptsEl) return;
+  if (!settings.modePrompts) settings.modePrompts = {};
+  if (settings.modePrompts[settings.mode] !== undefined) {
+    promptsEl.value = settings.modePrompts[settings.mode];
+  } else {
+    promptsEl.value = "";
+  }
+  updatePerPromptDurList();
+}
+
+// ---------------- Per-prompt duration panel ----------------
+// settings.promptDurations = { mode: { "0": "8", "1": "4" } }
+// Value "global" means: follow the global default (settings.duration).
+function getPerPromptDuration(idx) {
+  const perMode = (settings.promptDurations && settings.promptDurations[settings.mode]) || {};
+  const v = perMode[String(idx)];
+  if (v && v !== "global") return v;
+  return settings.duration || "8";
+}
+function updatePerPromptDurList() {
+  const card = document.getElementById("perDurCard");
+  const list = document.getElementById("perDurList");
+  if (!card || !list) return;
+  const prompts = parsePrompts();
+  if (prompts.length < 1) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  if (!settings.promptDurations) settings.promptDurations = {};
+  const perMode = settings.promptDurations[settings.mode] || {};
+  list.innerHTML = "";
+  prompts.forEach((text, i) => {
+    const row = document.createElement("div");
+    row.className = "dur-row";
+    const preview = text.replace(/\s+/g, " ").slice(0, 40) + (text.length > 40 ? "…" : "");
+    const customVal = perMode[String(i)];
+    const isCustom = customVal && customVal !== "global";
+    const sel = document.createElement("select");
+    sel.className = "dur-select";
+    sel.innerHTML = [
+      "<option value=\"4\"" + (isCustom && customVal === "4" ? " selected" : "") + ">4 " + t("perDurSec") + "</option>",
+      "<option value=\"6\"" + (isCustom && customVal === "6" ? " selected" : "") + ">6 " + t("perDurSec") + "</option>",
+      "<option value=\"8\"" + (isCustom && customVal === "8" ? " selected" : "") + ">8 " + t("perDurSec") + "</option>",
+      "<option value=\"10\"" + (isCustom && customVal === "10" ? " selected" : "") + ">10 " + t("perDurSec") + "</option>",
+      "<option value=\"global\"" + (!isCustom ? " selected" : "") + ">" + t("perDurGlobal") + " (" + String(settings.duration || "8").replace("-", "") + " " + t("perDurSec") + ")</option>",
+    ].join("");
+    sel.addEventListener("change", e => {
+      if (!settings.promptDurations) settings.promptDurations = {};
+      if (!settings.promptDurations[settings.mode]) settings.promptDurations[settings.mode] = {};
+      if (e.target.value === "global") delete settings.promptDurations[settings.mode][String(i)];
+      else settings.promptDurations[settings.mode][String(i)] = e.target.value;
+      saveSettings();
+      updatePerPromptDurList(); // refresh the "global" option display
+    });
+    row.innerHTML = '<div class="dur-num">#' + (i + 1) + '</div>' +
+      '<div class="dur-text"><b>' + escapeHtml(preview) + '</b> <span class="dur-chars">' + text.length + " chars</span></div>";
+    row.appendChild(sel);
+    list.appendChild(row);
+  });
+}
+
 // ---------------- Queue ----------------
 function parsePrompts() {
   const raw = document.getElementById("prompts").value;
@@ -1566,8 +1673,9 @@ function parsePrompts() {
 
 function updateQueueFromPrompts() {
   const prompts = parsePrompts();
-  queue = prompts.map((text, i) => ({ id: i, text, status: "pending" }));
+  queue = prompts.map((text, i) => ({ id: i, text, status: "pending", duration: getPerPromptDuration(i) }));
   renderQueue();
+  updatePerPromptDurList();
 }
 
 function renderQueue() {

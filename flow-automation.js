@@ -727,7 +727,10 @@
     }
     setOutputs(config.outputCount);
     await sleep(300);
-    if (config.duration) setDuration(config.duration);
+    // Per-prompt duration override: use the segment's individual duration if set,
+    // otherwise fall back to the global default (config.duration).
+    const sec = (item && item.duration) || config.duration;
+    if (sec) setDuration(sec);
     await sleep(500);
 
     // 5. Submit
