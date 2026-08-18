@@ -1073,6 +1073,9 @@ function applyI18n() {
     const key = el.getAttribute("data-i18n");
     if (key === "queueCount") {
       el.textContent = t("queueCount", queue.length);
+    } else if (key === "debugStatus") {
+      // debugStatus 是含 %N% 佔位符的動態計數，初始為 0 條，後續由 addDebugLine 更新
+      el.textContent = t("debugStatus", "0");
     } else {
       el.innerHTML = t(key);
     }
