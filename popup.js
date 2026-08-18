@@ -1663,11 +1663,14 @@ async function showNotFlowWarning() {
   let isFlowProject = false;
   try {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const url = tabs[0]?.url || "";
-      // 支援任何語言路徑：/fx/tools/flow、/fx/zh/tools/flow、/fx/en/tools/flow 等
-      // Flow 主頁與專案頁皆視為可用（偵測「不在 Flow」的相反條件）
-      isFlowProject = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
+      // side panel 是獨立 window，currentWindow 查的是面板自身；改為不限 window 查詢所有活動分頁
+      // Chrome 可能把面板/彈窗自身標為 active，排除 chrome-extension:// 頁面後再判斷：
+      // 任一活動分頁在 Flow 上，或目前有任何 Flow 分頁存在，即視為可用（切回 Flow 時彈窗自動消失）
+      const tabs = await chrome.tabs.query({ active: true });
+      const extTabs = (tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
+      const anyTab = extTabs[0]?.url || "";
+      const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*tools/flow*" });
+      isFlowProject = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(anyTab) || flowTabs.length > 0;
     } else {
       // Preview mode (file://): treat as not Flow; modal cannot be dismissed by user
       isFlowProject = false;
@@ -1687,9 +1690,11 @@ async function showNotFlowWarning() {
   notFlowCheckTimer = setInterval(async () => {
     try {
       if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const url = tabs[0]?.url || "";
-        const onFlow = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
+        const tabs = await chrome.tabs.query({ active: true });
+        const extTabs = (tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
+        const anyTab = extTabs[0]?.url || "";
+        const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*tools/flow*" });
+        const onFlow = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(anyTab) || flowTabs.length > 0;
         const shouldLock = !onFlow;
         if (shouldLock !== lastFlowState) {
           lastFlowState = shouldLock;

@@ -6,6 +6,12 @@ GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-
 
 ## Changelog 版本紀錄
 
+### v1.9.3 (2026-08-18)
+
+| 新增 / 修正 | 說明 |
+| --- | --- |
+| 彈窗切回 Flow 自動消失修正 | 側邊面板（side panel）是 Chrome 的獨立 window，原偵測邏輯用 `chrome.tabs.query({ active: true, currentWindow: true })` 只會查到面板自身的活動分頁，永遠找不到 Flow 分頁，導致離開 Flow 後切回時強制彈窗不會自動消失；現改為不限 window 查詢所有活動分頁，任一活動分頁在 Flow 上即解除鎖定，切回 Flow 彈窗立即自動消失 |
+
 ### v1.9.2 (2026-08-18)
 
 | 新增 / 修正 | 說明 |
