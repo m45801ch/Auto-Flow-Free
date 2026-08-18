@@ -636,7 +636,7 @@ function renderPreview() {
   const card = document.getElementById("previewCard");
   const grid = document.getElementById("previewGrid");
   const empty = document.getElementById("emptyPreview");
-  const isChain = settings.mode === "frame2video" && !!document.getElementById("chainToggle").checked;
+  const isChain = (settings.mode === "frame2video" || settings.mode === "text2video") && !!document.getElementById("chainToggle").checked;
   card.classList.toggle("hidden", !isChain);
   grid.innerHTML = "";
   const cells = new Map();
@@ -1481,6 +1481,10 @@ function bindUI() {
 // ---------------- Mode UI ----------------
 function updateModeUI() {
   const isFrame = settings.mode === "frame2video";
+  // Chain Prompt is supported in both Frames-to-Video and Text-to-Video. For
+  // text2video, the content script temporarily switches Flow's UI to the
+  // Frames-to-Video panel so each segment's last frame can be attached.
+  const supportsChain = settings.mode === "frame2video" || settings.mode === "text2video";
   const needsUploadZone = settings.mode !== "text2video" && settings.mode !== "text2image";
   const isImage = settings.mode === "text2image" || settings.mode === "image2image";
   const isImg2Img = settings.mode === "image2image";
@@ -1489,14 +1493,14 @@ function updateModeUI() {
   const supportsVoice = settings.mode === "text2video" || settings.mode === "components2video" || settings.mode === "agent";
   document.getElementById("uploadZone").classList.toggle("hidden", !needsUploadZone);
   document.getElementById("frameOptions").classList.toggle("hidden", !isFrame);
-  document.getElementById("chainCard").classList.toggle("hidden", !isFrame);
+  document.getElementById("chainCard").classList.toggle("hidden", !supportsChain);
   document.getElementById("maxImagesCard").classList.toggle("hidden", !needsMaxImages);
   document.getElementById("charImageCard").classList.toggle("hidden", !supportsCharImages);
   updateCharImageLabel();
   document.getElementById("voiceCard").classList.toggle("hidden", !supportsVoice);
   document.getElementById("voiceDefaultRow").classList.toggle("hidden", !supportsVoice || !settings.voiceEnabled);
-  document.getElementById("chainHint").classList.toggle("hidden", !isFrame || !settings.chainEnabled);
-  if (isFrame && settings.chainEnabled) {
+  document.getElementById("chainHint").classList.toggle("hidden", !supportsChain || !settings.chainEnabled);
+  if (supportsChain && settings.chainEnabled) {
     // Chaining requires sequential processing
     settings.concurrency = 1;
     document.getElementById("concurrency").value = "1";
@@ -2144,7 +2148,7 @@ async function startBatch(resumeIndex) {
 
   // Auto-detect resumable checkpoint in chain mode
   let effResume = resumeIndex !== undefined ? resumeIndex : 0;
-  if (!effResume && settings.mode === "frame2video" && settings.chainEnabled) {
+  if (!effResume && (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) {
     const cp = tryDetectCheckpoint();
     if (cp) {
       const doneCount = queue.filter(q => q.status === "done").length;
@@ -2172,7 +2176,7 @@ async function startBatch(resumeIndex) {
 
   const config = {
     mode: settings.mode,
-    concurrency: settings.mode === "frame2video" && settings.chainEnabled ? 1 : settings.concurrency,
+    concurrency: (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled ? 1 : settings.concurrency,
     waitMin: settings.waitMin,
     waitMax: settings.waitMax,
     frames: framesForConfig,
@@ -2225,7 +2229,8 @@ function stopBatch() {
   running = false;
   document.getElementById("btnRun").classList.remove("hidden");
   document.getElementById("btnStop").classList.add("hidden");
-  if (settings.mode === "frame2video" && settings.chainEnabled) {
+  const isChainMode = (settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled;
+  if (isChainMode) {
     saveCheckpoint();
     toast(t("checkpointSaved"));
   } else {
@@ -2244,8 +2249,8 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
         running = false;
         document.getElementById("btnRun").classList.remove("hidden");
         document.getElementById("btnStop").classList.add("hidden");
-        if (settings.mode === "frame2video" && settings.chainEnabled) saveCheckpoint();
-      } else if (settings.mode === "frame2video" && settings.chainEnabled) {
+        if ((settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) saveCheckpoint();
+      } else if ((settings.mode === "frame2video" || settings.mode === "text2video") && settings.chainEnabled) {
         saveCheckpoint();
       }
     }

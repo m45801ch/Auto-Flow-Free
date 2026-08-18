@@ -102,6 +102,44 @@
       /Veo|veo/.test(el.textContent || ""));
   }
 
+  // --------------- Flow panel mode switch (chain across video modes) ---------------
+  // Chain generation for text2video works by temporarily switching Flow's UI to
+  // the Frames-to-Video panel (which accepts an input image = last frame), so we
+  // need reliable buttons to switch panels. Labels cover Traditional Chinese,
+  // Simplified Chinese and English Flow UIs.
+  const MODE_BUTTON_LABELS = {
+    text2video: ["文字轉影片", "文字转视频", "Text to Video"],
+    frame2video: ["幀數轉影片", "帧数转视频", "Frames to Video"]
+  };
+  function findModeSwitchButton(modeKey) {
+    const labels = MODE_BUTTON_LABELS[modeKey] || [];
+    const candidates = Array.from(document.querySelectorAll("button, [role='button'], nav a, a[href]"));
+    for (const label of labels) {
+      const el = candidates.find(c => (c.textContent || "").trim() === label);
+      if (el) return el;
+    }
+    // Fallback: partial match (e.g. a label with extra whitespace or decoration)
+    for (const label of labels) {
+      const el = candidates.find(c => (c.textContent || "").trim().includes(label));
+      if (el) return el;
+    }
+    return null;
+  }
+  // Click the Flow UI button that switches to the given video panel, then wait
+  // for the panel to re-render. Returns true on success.
+  async function switchMode(modeKey) {
+    const el = findModeSwitchButton(modeKey);
+    if (!el) {
+      logError("Mode switch failed: button not found for", modeKey);
+      return false;
+    }
+    log("Switching Flow panel to", modeKey);
+    click(el);
+    // Flow re-renders the panel (inputs, upload zone, options) after the switch
+    await sleep(3500);
+    return true;
+  }
+
   // --------------- Select dropdown option ---------------
   function selectByText(text) {
     const els = Array.from(document.querySelectorAll("*")).filter(
@@ -733,8 +771,18 @@
     reportItemStatus(item.id, "running");
     const mediaBefore = snapshotMedia();
 
-    // 0. Chain Prompt: append the previous video's last frame as input image
-    if (config.chainEnabled && config.mode === "frame2video") {
+    // 0a. Chain mode: switch Flow UI to the Frames-to-Video panel, which accepts
+    // an input image (the previous segment's last frame). A text2video chain
+    // runs through that panel so the chain frame can be attached automatically.
+    if (config.chainEnabled && config.mode === "text2video") {
+      if (await switchMode("frame2video") === false) {
+        logError("Cannot switch to frames panel; chain generation aborted for item", item.id);
+        throw new Error("mode switch failed");
+      }
+    }
+
+    // 0b. Chain Prompt: append the previous video's last frame as input image
+    if (config.chainEnabled && (config.mode === "frame2video" || config.mode === "text2video")) {
       if (chainLastFrame) {
         log("Chain: uploading last frame of the previous video for item", item.id);
         const ok = await uploadFrames([chainLastFrame]);
@@ -819,7 +867,7 @@
     await sleep(10000);
 
     // 8. Chain Prompt: capture the last frame of the newly generated video
-    if (config.chainEnabled && config.mode === "frame2video") {
+    if (config.chainEnabled && (config.mode === "frame2video" || config.mode === "text2video")) {
       try {
         const media = await waitForResult(60000);
         if (media) {
@@ -897,6 +945,11 @@
         }
       } catch (e) {
         log("Chain frame capture skipped:", e.message);
+      }
+      // 0c. Chain started from text2video: switch back to the Text-to-Video panel
+      // so the UI stays consistent for the next segment (and for the user).
+      if (config.chainEnabled && config.mode === "text2video") {
+        await switchMode("text2video");
       }
     }
   }

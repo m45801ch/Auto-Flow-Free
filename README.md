@@ -5,6 +5,10 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.19 更新重點
+- 「文字轉影片」模式支援連鎖生成（Chain Prompt）：開啟連鎖後，每段生成時自動切換到 Flow 的「幀數轉影片」面板，將上一段影片的最後一格畫面作為下一段的輸入圖片，生成完成後自動切回「文字轉影片」面板。介面全程停留在文字轉影片操作，連鎖即時預覽、色彩過渡偵測、自動重試與斷點續跑均照常運作
+- 面板切換按鈕支援繁體中文、簡體中文與英文三種 Flow 介面
+
 ## v1.9.18 更新重點
 - 開啟「自動新增角色」後，「掃描到的角色（多選）」清單自動收合，且勾選框停用（不可再選取）
 - 補上 6 個語音的語調描述（Schedar、Sulafat、Umbriel、Vindemiatrix、Zephyr、Zubenelgenubi）
