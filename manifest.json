@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Flow Free",
+  "description": "Auto Flow your prompts at scale. Batch generate and auto-download videos and images on Google Flow. 文字轉影片、幀轉影片自動批次處理。",
+  "version": "1.9.1",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "downloads",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://labs.google/fx/tools/flow/*",
+    "https://labs.google/*"
+  ],
+  "action": {
+    "default_title": "Auto Flow Free",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://labs.google/fx/tools/flow*"
+      ],
+      "js": [
+        "flow-automation.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
