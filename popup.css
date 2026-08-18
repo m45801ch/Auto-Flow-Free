@@ -592,6 +592,8 @@ textarea#prompts {
 }
 .download-gear:hover { color: var(--accent); }
 .download-hint { font-size: 11.5px; line-height: 1.5; color: var(--text-dim); flex: 1; }
+/* Download hint placed below the card frame */
+.download-hint-outside { font-size: 11.5px; line-height: 1.5; color: var(--text-dim); margin: -4px 0 12px 0; }
 
 /* Save / reset settings buttons */
 .save-actions {

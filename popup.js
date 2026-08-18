@@ -24,7 +24,7 @@ const i18n = {
     hintChain: "自動將上一段影片的最後一格畫面作為下一個 prompt 的輸入圖片。",
     hintChainNote: "啟用連鎖生成時，將依序逐一處理 prompt，無法並行。",
     hintPrompts: "用空行分隔每個 prompt。",
-    toggleCharacter: "自動新增角色 (Google Flow 功能 ⭐)",
+    toggleCharacter: "自動新增角色 (Google Flow 功能)",
     hintCharacter: "當提示詞中提及角色時，自動選擇對應角色。",
     labelDefaultChar: "預設角色",
     hintCharScan: "尚未掃描任何角色。請在 Google Flow 中開啟一個專案，然後點選「掃描角色」按鈕。",
@@ -200,7 +200,7 @@ const i18n = {
     hintChain: "Automatically use the last frame of the previous video as the input image for the next prompt.",
     hintChainNote: "When chaining is enabled, prompts are processed one by one in order (no concurrency).",
     hintPrompts: "Separate each prompt with blank lines.",
-    toggleCharacter: "Auto-add character (Google Flow feature ⭐)",
+    toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "Automatically select the character when it is mentioned in a prompt.",
     labelDefaultChar: "Default character",
     hintCharScan: "No characters scanned yet. Open a project in Google Flow and click \"Scan characters\".",
@@ -381,7 +381,7 @@ const i18n = {
     hintChain: "自动将上一个视频的最后画面作为下一个 prompt 的输入图片。",
     hintChainNote: "启用连锁生成时，将按顺序逐个处理 prompt，无法并发。",
     hintPrompts: "用空行分隔每个 prompt。",
-    toggleCharacter: "Auto-add character (Google Flow feature ⭐)",
+    toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "当提示词中提及角色时，自动选择对应角色。",
     labelDefaultChar: "默认角色",
     hintCharScan: "尚未扫描任何角色。请在 Google Flow 中打开一个项目，然后点击「扫描角色」按钮。",
@@ -1333,6 +1333,7 @@ function bindUI() {
   const repoBtn = document.getElementById("openRepo");
   if (repoBtn) {
     repoBtn.addEventListener("click", e => {
+      e.preventDefault(); // The <a> itself has target="_blank"; prevent its default to avoid opening two tabs
       if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.create) {
         chrome.tabs.create({ url: "https://github.com/m45801ch/Auto-Flow-Free" });
       }
