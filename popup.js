@@ -20,7 +20,7 @@ const i18n = {
     uploadTitle: "點選上傳或拖曳",
     uploadHint: "PNG, JPG, GIF 每個大小不超過 50MB",
     labelFrameOption: "圖片處理選項",
-    toggleChain: "Chain Prompt 連鎖生成 ⛓",
+    toggleChain: "Chain Prompt 連鎖生成",
     hintChain: "自動將上一段影片的最後一格畫面作為下一個 prompt 的輸入圖片。",
     hintChainNote: "啟用連鎖生成時，將依序逐一處理 prompt，無法並行。",
     hintPrompts: "用空行分隔每個 prompt。",
@@ -32,11 +32,15 @@ const i18n = {
     labelMaxImages: "每個 prompt 的最大輸入圖片數",
     hintMaxImages: "每段提示詞處理時最多使用的輸入圖片數量。",
     toggleCharImages: "自動新增角色圖片",
+    toggleCharImagesUpload: "自動新增上傳的角色圖片",
     hintCharImages: "自動新增與 prompt 中角色名稱相符的圖片（根據檔名）。",
     toggleVoice: "按說話者自動新增語音",
     hintVoice: "當 prompt 中提到說話者名稱時，自動選擇對應的語音。",
     labelDefaultVoice: "預設說話者",
     voiceDefault: "未設定語音",
+    btnVoicePreview: "試聽",
+    toastSelectVoiceFirst: "請先選擇語音",
+    toastVoicePreviewFail: "語音試聽失敗",
     labelOutputs: "每個 prompt 的輸出數量",
     hintOutputs: "每個 prompt 需要生成的圖片/影片數量。",
     labelFolder: "儲存到資料夾",
@@ -192,7 +196,7 @@ const i18n = {
     uploadTitle: "Click to upload or drag",
     uploadHint: "PNG, JPG, GIF each under 50MB",
     labelFrameOption: "Frame processing option",
-    toggleChain: "Chain Prompt Chaining ⛓",
+    toggleChain: "Chain Prompt Chaining",
     hintChain: "Automatically use the last frame of the previous video as the input image for the next prompt.",
     hintChainNote: "When chaining is enabled, prompts are processed one by one in order (no concurrency).",
     hintPrompts: "Separate each prompt with blank lines.",
@@ -204,11 +208,15 @@ const i18n = {
     labelMaxImages: "Max input images per prompt",
     hintMaxImages: "Maximum number of input images used per prompt.",
     toggleCharImages: "Auto-add character images",
+    toggleCharImagesUpload: "Auto-add uploaded character images",
     hintCharImages: "Auto-add images whose file names match character names mentioned in the prompt.",
     toggleVoice: "Auto-add voice by speaker",
     hintVoice: "When a prompt mentions a speaker name, automatically select the corresponding voice.",
     labelDefaultVoice: "Default speaker",
     voiceDefault: "No voice configured",
+    btnVoicePreview: "Preview",
+    toastSelectVoiceFirst: "Select a voice first",
+    toastVoicePreviewFail: "Voice preview failed",
     labelOutputs: "Outputs per prompt",
     hintOutputs: "Number of images/videos to generate per prompt.",
     labelFolder: "Save to folder",
@@ -369,7 +377,7 @@ const i18n = {
     uploadTitle: "点击上传或拖拽",
     uploadHint: "PNG, JPG, GIF 每个大小不超过 50MB",
     labelFrameOption: "图片处理选项",
-    toggleChain: "Chain Prompt 连锁生成 ⛓",
+    toggleChain: "Chain Prompt 连锁生成",
     hintChain: "自动将上一个视频的最后画面作为下一个 prompt 的输入图片。",
     hintChainNote: "启用连锁生成时，将按顺序逐个处理 prompt，无法并发。",
     hintPrompts: "用空行分隔每个 prompt。",
@@ -381,11 +389,15 @@ const i18n = {
     labelMaxImages: "每个 prompt 的最大输入图片数",
     hintMaxImages: "每段提示词处理时最多使用的输入图片数量。",
     toggleCharImages: "自动添加角色图片",
+    toggleCharImagesUpload: "自动添加上传的角色图片",
     hintCharImages: "自动添加与 prompt 中角色名称匹配的图片（基于文件名）。",
     toggleVoice: "按说话者自动添加语音",
     hintVoice: "当 prompt 中提到说话者名称时，自动选择对应的语音。",
     labelDefaultVoice: "默认说话者",
     voiceDefault: "未配置语音",
+    btnVoicePreview: "试听",
+    toastSelectVoiceFirst: "请先选择语音",
+    toastVoicePreviewFail: "语音试听失败",
     labelOutputs: "每个 prompt 的输出数量",
     hintOutputs: "每个 prompt 需要生成的图片/视频数量。",
     labelFolder: "保存到文件夹",
@@ -1016,6 +1028,13 @@ function toast(msg) {
 }
 
 // ---------------- Apply i18n ----------------
+// 智慧體自動化（agent）模式下，角色圖片開關改為強調「上傳的」角色圖片
+function updateCharImageLabel() {
+  const charImgLabel = document.querySelector('[data-i18n="toggleCharImages"]');
+  if (charImgLabel) {
+    charImgLabel.innerHTML = settings.mode === "agent" ? t("toggleCharImagesUpload") : t("toggleCharImages");
+  }
+}
 function applyI18n() {
   document.querySelectorAll("[data-i18n]").forEach(el => {
     const key = el.getAttribute("data-i18n");
@@ -1034,6 +1053,8 @@ function applyI18n() {
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
     el.setAttribute("placeholder", t(el.getAttribute("data-i18n-placeholder")));
   });
+  // 智慧體自動化（agent）模式下，角色圖片開關改為強調「上傳的」角色圖片
+  updateCharImageLabel();
   // 同步語言下拉（頂部與設置整合）
   const ls = document.getElementById("langSelect");
   if (ls) ls.value = currentLang;
@@ -1060,37 +1081,70 @@ function rebuildCharOptions() {
 }
 
 // Google Flow 內建 30 個 Chirp 3 HD 語音（來源: docs.cloud.google.com/text-to-speech/docs/chirp3-hd）
+// 性別來自官方文件；tone（語調）為 Flow UI 顯示的特質描述。
 const VOICES = [
-  { name: "Achernar", gender: "female" }, { name: "Achird", gender: "male" },
-  { name: "Algenib", gender: "male" }, { name: "Algieba", gender: "male" },
-  { name: "Alnilam", gender: "male" }, { name: "Aoede", gender: "female" },
-  { name: "Autonoe", gender: "female" }, { name: "Callirrhoe", gender: "female" },
-  { name: "Charon", gender: "male" }, { name: "Despina", gender: "female" },
-  { name: "Enceladus", gender: "male" }, { name: "Erinome", gender: "female" },
-  { name: "Fenrir", gender: "male" }, { name: "Gacrux", gender: "female" },
-  { name: "Iapetus", gender: "male" }, { name: "Kore", gender: "female" },
-  { name: "Laomedeia", gender: "female" }, { name: "Leda", gender: "female" },
-  { name: "Orus", gender: "male" }, { name: "Pulcherrima", gender: "female" },
-  { name: "Puck", gender: "male" }, { name: "Rasalgethi", gender: "male" },
-  { name: "Sadachbia", gender: "male" }, { name: "Sadaltager", gender: "male" },
-  { name: "Schedar", gender: "male" }, { name: "Sulafat", gender: "female" },
-  { name: "Umbriel", gender: "male" }, { name: "Vindemiatrix", gender: "female" },
-  { name: "Zephyr", gender: "female" }, { name: "Zubenelgenubi", gender: "male" },
+  { name: "Achernar", gender: "female", tone: "柔和，高音調" },
+  { name: "Achird", gender: "male", tone: "友好，中音調" },
+  { name: "Algenib", gender: "male", tone: "沙啞，低音調" },
+  { name: "Algieba", gender: "male", tone: "隨和，中低音調" },
+  { name: "Alnilam", gender: "male", tone: "穩重，中低音調" },
+  { name: "Aoede", gender: "female", tone: "輕快，中音調" },
+  { name: "Autonoe", gender: "female", tone: "明亮，中音調" },
+  { name: "Callirrhoe", gender: "female", tone: "隨和，中音調" },
+  { name: "Charon", gender: "male", tone: "訊息豐富，低音調" },
+  { name: "Despina", gender: "female", tone: "流暢，中音調" },
+  { name: "Enceladus", gender: "male", tone: "和氣親切，低音調" },
+  { name: "Erinome", gender: "female", tone: "清晰，中音調" },
+  { name: "Fenrir", gender: "male", tone: "活潑，年輕音調" },
+  { name: "Gacrux", gender: "female", tone: "成熟，中音調" },
+  { name: "Iapetus", gender: "male", tone: "清晰，中低音調" },
+  { name: "Kore", gender: "female", tone: "穩重，中音調" },
+  { name: "Laomedeia", gender: "female", tone: "活躍，中高音調" },
+  { name: "Leda", gender: "female", tone: "年輕，中高音調" },
+  { name: "Orus", gender: "male", tone: "穩重，中低音調" },
+  { name: "Pulcherrima", gender: "female", tone: "積極，中高音調" },
+  { name: "Puck", gender: "male", tone: "活潑，中音調" },
+  { name: "Rasalgethi", gender: "male", tone: "訊息豐富，中音調" },
+  { name: "Sadachbia", gender: "male", tone: "活力，低音調" },
+  { name: "Sadaltager", gender: "male", tone: "博學，中音調" },
+  { name: "Schedar", gender: "male", tone: "沉穩，中音調" },
+  { name: "Sulafat", gender: "female", tone: "溫暖，高音調" },
+  { name: "Umbriel", gender: "male", tone: "自然，中音調" },
+  { name: "Vindemiatrix", gender: "female", tone: "溫暖，中音調" },
+  { name: "Zephyr", gender: "female", tone: "親切，高音調" },
+  { name: "Zubenelgenubi", gender: "male", tone: "磁性，中音調" },
 ];
 
 function rebuildVoiceOptions() {
   const select = document.getElementById("voiceSelect");
   if (!select) return;
   const prev = select.value;
-  const genderLabel = (g) => currentLang === "zh-CN" ? (g === "male" ? "男性" : "女性") : (g === "male" ? "Male" : "Female");
+  const genderLabel = (g) => currentLang === "en" ? (g === "male" ? "Male" : "Female") : (g === "male" ? "男" : "女");
   select.innerHTML = '<option value="">' + t("optCharNone") + '</option>';
   VOICES.forEach(v => {
     const opt = document.createElement("option");
     opt.value = v.name;
-    opt.textContent = v.name + " - " + genderLabel(v.gender);
+    let label = v.name + " - " + genderLabel(v.gender);
+    if (v.tone) label += " - " + v.tone;
+    opt.textContent = label;
     select.appendChild(opt);
   });
   if (Array.from(select.options).some(o => o.value === prev)) select.value = prev;
+}
+
+// 試聽：官方文件提供每個 Chirp 3 HD 語音的示範音檔（公開 CDN），
+// 檔名規律為 chirp3-hd-<voice 小寫>.wav。
+function voiceDemoUrl(name) {
+  return "https://docs.cloud.google.com/static/text-to-speech/docs/audio/chirp3-hd-" + String(name).toLowerCase() + ".wav";
+}
+
+let voicePreviewAudio = null;
+function previewVoice() {
+  const name = document.getElementById("voiceSelect")?.value;
+  if (!name) { toast(t("toastSelectVoiceFirst")); return; }
+  if (voicePreviewAudio) { try { voicePreviewAudio.pause(); } catch (e) { /* ignore */ } }
+  voicePreviewAudio = new Audio(voiceDemoUrl(name));
+  voicePreviewAudio.play().catch(() => { toast(t("toastVoicePreviewFail")); });
 }
 // ---------------- UI bindings ----------------
 function bindUI() {
@@ -1244,6 +1298,8 @@ function bindUI() {
     voiceSelect.value = settings.defaultVoice || "";
     voiceSelect.addEventListener("change", () => { settings.defaultVoice = voiceSelect.value; saveSettings(); });
   }
+  const voicePreviewBtn = document.getElementById("voicePreview");
+  if (voicePreviewBtn) voicePreviewBtn.addEventListener("click", previewVoice);
 
   // Chain toggle
   const chainToggle = document.getElementById("chainToggle");
@@ -1430,12 +1486,13 @@ function updateModeUI() {
   const isImg2Img = settings.mode === "image2image";
   const needsMaxImages = isImg2Img || settings.mode === "components2video" || settings.mode === "agent";
   const supportsCharImages = isImg2Img || settings.mode === "components2video" || settings.mode === "agent";
-  const supportsVoice = settings.mode === "components2video" || settings.mode === "agent";
+  const supportsVoice = settings.mode === "text2video" || settings.mode === "components2video" || settings.mode === "agent";
   document.getElementById("uploadZone").classList.toggle("hidden", !needsUploadZone);
   document.getElementById("frameOptions").classList.toggle("hidden", !isFrame);
   document.getElementById("chainCard").classList.toggle("hidden", !isFrame);
   document.getElementById("maxImagesCard").classList.toggle("hidden", !needsMaxImages);
   document.getElementById("charImageCard").classList.toggle("hidden", !supportsCharImages);
+  updateCharImageLabel();
   document.getElementById("voiceCard").classList.toggle("hidden", !supportsVoice);
   document.getElementById("voiceDefaultRow").classList.toggle("hidden", !supportsVoice || !settings.voiceEnabled);
   document.getElementById("chainHint").classList.toggle("hidden", !isFrame || !settings.chainEnabled);
@@ -1706,10 +1763,25 @@ async function scanCharacters() {
         panels.forEach(panel => {
           try {
             panel.querySelectorAll("img[src]").forEach(img => {
-              const card = img.closest("figure, li, div");
-              if (!card) return;
-              // A real card: the image must be a direct visual child of the card element
-              const cardImgs = Array.from(card.querySelectorAll("img[src]"));
+              // Locate the card wrapper that owns this image: a figure/li, or the
+              // innermost container that holds exactly this one image. This prevents
+              // a shared wrapper (a row of character cards, or a card with a status
+              // icon first) from hiding every card except the first one — otherwise
+              // short-named characters like "test" fall through to the page-wide
+              // pass, where the name blacklist would drop them.
+              let card = img.parentElement;
+              let hops = 0;
+              while (card && card !== panel && hops < 10) {
+                const t = (card.tagName || "").toUpperCase();
+                if (t === "FIGURE" || t === "LI") break;
+                if (t === "DIV" && Array.from(card.querySelectorAll("img[src]")).filter(i => i !== img).length === 0) break;
+                card = card.parentElement;
+                hops++;
+              }
+              if (!card || card === panel) card = img;
+              // A real card: the image must be the main/first image of its card.
+              // (An <img> fallback means the panel itself holds the image directly.)
+              const cardImgs = card === img ? [img] : Array.from(card.querySelectorAll("img[src]"));
               if (cardImgs.length === 0 || cardImgs[0] !== img) return;
               const alt = (img.getAttribute("alt") || "").trim();
               const cardText = (card?.textContent || "").replace(/\s+/g, " ").trim();
@@ -1764,7 +1836,7 @@ async function scanCharacters() {
     dedup.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.name;
-      opt.textContent = c.src ? "🖼 " + c.name : c.name;
+      opt.textContent = c.name;
       if (c.src) opt.dataset.charImg = c.src;
       select.appendChild(opt);
     });
@@ -1806,6 +1878,7 @@ function renderCharMultiList(chars) {
     cb.className = "char-multi-cb";
     cb.value = c.name;
     cb.checked = checked;
+    cb.disabled = !!settings.charEnabled;
     cb.addEventListener("change", () => {
       const names = Array.from(list.querySelectorAll("input[type='checkbox']")).filter(i => i.checked).map(i => i.value);
       settings.charSelected = names;
@@ -1859,6 +1932,9 @@ function updateCharScanState() {
   const btn = document.getElementById("scanChars");
   const hint = document.getElementById("charHint");
   const sel = document.getElementById("charSelect");
+  const multiList = document.getElementById("charMultiList");
+  const multiToggle = document.getElementById("charMultiToggle");
+  const multiHeader = document.getElementById("charMultiHeader");
   if (!btn || !hint) return;
   const span = btn.querySelector("span");
   if (settings.charEnabled) {
@@ -1868,12 +1944,26 @@ function updateCharScanState() {
     hint.textContent = t("scanAutoMatched");
     // Auto-match is ON → the default-character dropdown must not be used
     if (sel) { sel.disabled = true; sel.classList.add("disabled"); }
+    // 自動匹配時，多選清單不可再勾選，並收合
+    if (multiList) {
+      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = true; });
+      multiList.classList.add("collapsed");
+    }
+    if (multiToggle) {
+      const caret = multiToggle.querySelector(".caret-icon");
+      if (caret) caret.classList.add("collapsed");
+      multiToggle.setAttribute("title", "展開");
+    }
+    if (multiHeader) multiHeader.setAttribute("title", "展開");
   } else {
     btn.disabled = false;
     btn.classList.remove("disabled");
     if (span) span.textContent = t("btnScanChars");
     hint.textContent = t("hintCharScan");
     if (sel) { sel.disabled = false; sel.classList.remove("disabled"); }
+    if (multiList) {
+      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = false; });
+    }
   }
 }
 

@@ -120,6 +120,7 @@ body {
 
 main.panel { padding: 12px; }
 .scan-card { display: flex; align-items: flex-end; }
+.scan-card .small-btn { height: 38px; }
 
 /* Mode grid */
 .mode-grid {
@@ -172,6 +173,9 @@ main.panel { padding: 12px; }
   margin-bottom: 2px;
   align-items: stretch;
 }
+.voice-select-row { display: flex; gap: 8px; align-items: stretch; }
+.voice-select-row select { flex: 1; }
+.voice-select-row .small-btn { flex-shrink: 0; }
 
 select, input[type="text"], input[type="number"], textarea {
   width: 100%;

@@ -5,6 +5,29 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.18 更新重點
+- 開啟「自動新增角色」後，「掃描到的角色（多選）」清單自動收合，且勾選框停用（不可再選取）
+- 補上 6 個語音的語調描述（Schedar、Sulafat、Umbriel、Vindemiatrix、Zephyr、Zubenelgenubi）
+
+## v1.9.17 更新重點
+- 「自動新增角色 (Google Flow 功能)」實作完成：prompt 提到已掃描到的專案角色時，會自動在 Flow UI 上選中對應角色（依名稱/文字/角色卡片多重策略比對），未匹配到任何角色時退回預設角色
+
+## v1.9.16 更新重點
+- 「預設角色」下拉選單移除角色名稱前的 🖼 符號
+
+## v1.9.15 更新重點
+- 「預設角色」下拉選單與「掃描角色」按鈕、「預設說話者」下拉選單與「試聽」按鈕調整為相同高度
+- 移除「Chain Prompt 連鎖生成」標題中多餘的 ⛓ 符號（標題已有鏈結圖示）
+
+## v1.9.14 更新重點
+- 「按說話者自動新增語音」與「預設說話者」合併為同一張卡片，試聽按鈕移至下拉選單右側並排
+- 「預設角色」、「掃描角色」與「掃描到的角色（多選）」合併為同一張卡片
+
+## v1.9.13 更新重點
+- 「按說話者自動新增語音」擴充至「文字轉影片」模式（原僅組件轉影片、智慧體自動化）
+- 「預設說話者」下拉選單新增「試聽」按鈕，直接播放 Google 官方 Chirp 3 HD 語音示範音檔；性別於中文介面改為中文（男/女），並在語音名稱後附上語調描述（如「柔和，高音調」）
+- 智慧體自動化模式下，「自動新增角色圖片」標籤改為「自動新增上傳的角色圖片」，並修正切換模式時標籤未即時更新的問題
+
 ## v1.9.12 更新重點
 - Flow 頁面偵測回歸 v1.9.1 已驗證的成功實作：面板直接以目前活動分頁網址判斷（支援任何語言路徑），每秒輪詢比對狀態，進入 Flow 時彈窗自動消失、離開時立即重彈；同時保留背景服務廣播作為補充偵測
 - 「掃描角色」不再漏掃與誤收：角色面板內的卡片優先以檔名式文字提取角色名稱（不怕卡片文字含時間戳等雜訊），面板判定改為只核對標題層元素避免誤判 AI 對話面板；全域按鈕標籤掃描（「帶我了解你能做什麼」等對話選項的來源）已移除，並加黑名單擋住對話選項文字
@@ -74,7 +97,7 @@ GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-
 | 隨機等待 | Random wait (seconds) before processing the next prompt |
 | Prompts 批次輸入 | Paste prompts separated by blank lines, or upload `.txt` / `.csv` |
 | Frame upload | Drag & drop upload, start frame / first-last frames / all frames options |
-| Chain Prompt ⛓ | Auto-capture the last frame of the previous video and use it as the input image for the next prompt, forming a continuous generation chain (sequential processing only) |
+| Chain Prompt | Auto-capture the last frame of the previous video and use it as the input image for the next prompt, forming a continuous generation chain (sequential processing only) |
 | 斷点续跑 Checkpoint Resume | Chain mode automatically saves a checkpoint (done segments, last-frame copies, queue status). If interrupted or a prompt fails, click「断点续跑」to resume from the last successful segment — the saved last frame is restored as the first frame of the resumed run |
 | 连锁预览 实时管理面板 | Live preview panel in chain mode: each completed segment shows its last-frame copy (click「保存帧副本」to download the PNG copy) plus a playable video player, updating in real time as the batch runs |
 | 拖曳排序 Drag to reorder | In chain mode, drag any pending segment card (⠿ handle) to reorder the chain; completed segments are locked, and the prompts text follows the new order automatically |

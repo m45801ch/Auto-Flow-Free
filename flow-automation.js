@@ -298,12 +298,80 @@
   }
 
   // --------------- Auto character / voice ---------------
+  // 當 prompt 提到已掃描到的角色時，在 Flow UI 上「選中」對應角色；
+  // 沒匹配到任何角色時退回「預設角色」。
   function tryAutoCharacter(text) {
     if (!config.charEnabled) return;
     log("Auto character requested for:", text.slice(0, 50));
+    const matched = charsInText(text);
+    const names = matched.length > 0 ? matched : (config.defaultChar ? [config.defaultChar] : []);
+    if (names.length === 0) {
+      log("No character matched and no default character set, skipping");
+      return;
+    }
+    for (const name of names) {
+      if (selectCharacter(name)) {
+        log("Character selected:", name);
+        return;
+      }
+    }
+    log("Character not found in UI:", names.join(", "));
   }
 
-  // Auto-add voice by speaker (components2video / agent modes):
+  // 在 Flow 頁面上找出並點擊指定角色。角色以「卡片」呈現：一張圖 + 名稱文字/alt。
+  // 與 popup 的掃描角色邏輯對應：底線視為空格、不區分大小寫；優先點擊最精確的元素。
+  function selectCharacter(name) {
+    const nn = (name || "").trim();
+    if (!nn) return false;
+    const nnorm = nn.replace(/_/g, " ").toLowerCase();
+    const normText = (s) => (s || "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    const hit = (s) => {
+      const t = normText(s);
+      if (!t) return false;
+      if (t === nnorm) return true;
+      return t.split(/[\s,，、;；|\/]+/).includes(nnorm);
+    };
+
+    // Strategy 1: 名稱是獨立文字元素（leaf）→ 點它（最精確、最不易誤按，
+    // 與 tryAutoVoice 選語音的手法一致；click 事件會向上冒泡觸發卡片 onClick）。
+    const leaves = Array.from(document.querySelectorAll("span, div, p, a, button, li, figcaption"))
+      .filter(el => el.children.length === 0);
+    for (const el of leaves) {
+      if (normText(el.textContent) === nnorm) {
+        if (click(el)) { log("Character text clicked:", nn); return true; }
+      }
+    }
+
+    // Strategy 2: 角色卡片 — 收集所有「包著圖片且文字含名稱」的容器，
+    // 依文字長度排序（最短=最精確），直接點擊卡片本身。
+    const cards = [];
+    for (const img of Array.from(document.querySelectorAll("img[src]"))) {
+      let node = img;
+      for (let i = 0; node && i < 8; i++) {
+        node = node.parentElement;
+        if (!node) break;
+        const tag = (node.tagName || "").toUpperCase();
+        if (tag === "BUTTON" || tag === "A" || tag === "FIGURE" || tag === "LI" || tag === "DIV") {
+          if (hit(node.textContent)) cards.push(node);
+        }
+      }
+    }
+    cards.sort((a, b) => ((a.textContent || "").length - (b.textContent || "").length));
+    for (const card of cards) {
+      if (click(card)) { log("Character card clicked:", nn); return true; }
+    }
+
+    // Strategy 3: 可點擊元素其文字正好等於名稱。
+    for (const el of Array.from(document.querySelectorAll("button, [role='button'], [role='option'], li, a"))) {
+      if (normText(el.textContent) === nnorm) {
+        if (click(el)) { log("Character option clicked:", nn); return true; }
+      }
+    }
+
+    return false;
+  }
+
+  // Auto-add voice by speaker (text2video / components2video / agent modes):
   // if a known voice name appears in the prompt, select that voice; otherwise
   // select the default voice when configured.
   function tryAutoVoice(text) {
