@@ -314,13 +314,17 @@
     const labelRe = /generate|生成|產生|送出|提交|執行|建立|create|submit|run/i;
     const describe = b => (b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
     // 排除角色卡內的按鈕（如「產生相同角色卡」），它們只是卡片工具按鈕而非專案送出按鈕
+    const bannedBtnText = /生成相同|產生相同|generat.*identical|identical character|相同角色|複製角色|duplicate character/i;
     const isInsideCharacterCard = b => {
+      // 絕對排除：按鈕本身文字命中「產生相同角色卡」等，不管它在哪
+      if (bannedBtnText.test(describe(b))) return true;
       let n = b;
-      for (let i = 0; n && i < 10; i++) {
+      for (let i = 0; n && i < 12; i++) {
         n = n.parentElement;
         if (!n) return false;
-        const cls = (n.className || "") + " " + (n.getAttribute && n.getAttribute("aria-label") || "");
-        if (/角色卡|character[- ]?card|角色/.test(cls) && /生成相同|generate.*identical|identical|相同角色|複製|duplicate/i.test(cls + " " + describe(b))) return true;
+        // 命中角色卡容器（含角色名的節點/角色卡 class），其內所有按鈕都排除
+        const cls = (n.className || "") + " " + (n.getAttribute && n.getAttribute("aria-label") || "") + " " + (n.getAttribute && n.getAttribute("aria-description") || "");
+        if (/角色卡|character[- ]?card/i.test(cls)) return true;
       }
       return false;
     };
@@ -346,7 +350,9 @@
     // 2) 全頁搜尋可見按鈕（優先非角色卡內的按鈕）
     const buttons = Array.from(document.querySelectorAll("button, [role='button']")).filter(isVisibleBtn);
     const pageButtons = buttons.filter(b => !isInsideCharacterCard(b));
-    const btn = (pageButtons.find(b => labelRe.test(b.textContent || "")) || buttons.find(b => labelRe.test(b.textContent || ""))) || pageButtons[pageButtons.length - 1] || buttons[buttons.length - 1];
+    const pageBtn = pageButtons.find(b => labelRe.test(b.textContent || "")) || pageButtons[pageButtons.length - 1];
+    const btn = pageBtn || buttons.find(b => labelRe.test(b.textContent || "")) || buttons[buttons.length - 1];
+    if (btn && isInsideCharacterCard(btn)) { log("All candidates are inside character cards; no submit button"); return null; }
     log("Submit button:", btn ? describe(btn) : "none");
     return btn || null;
   }
@@ -592,17 +598,17 @@
       "button, [role='tab'], [role='radio'], li, a, [class*='active']"
     )).map(el => ({ t: norm(el.textContent), selected: isTabSelected(el), el }));
     const pick = re => labels.find(l => re.test(l.t) && (l.selected || l.el.children.length === 0));
-    const videoRe = /文字轉影片|文字转视频|text to video|幀數轉影片|幀轉影片|帧数转视频|帧转视频|frames? to video|組件轉視頻|組件轉影片|组件转视频|components to video|智能體自動化|智能体自动化|agent/;
+    const videoRe = /文字轉影片|文字转视频|text to video|幀數轉影片|幀轉影片|帧数转视频|帧转视频|frames? to video|組件轉視頻|組件轉影片|组件转视频|components to video|圖片轉影片|图片转视频|image to video|智能體自動化|智能体自动化|agent/;
     const imageRe = /文字轉圖片|文字转图片|text to image|圖片轉圖片|图片转图片|image to image/;
     const vid = labels.filter(l => videoRe.test(l.t) && !imageRe.test(l.t));
     const img = labels.filter(l => imageRe.test(l.t) && !videoRe.test(l.t));
+    // 只認有明確選中狀態的模式標籤；避免把側欄/候選元素誤判成模式（v1.9.45）
     const vidSel = vid.find(l => l.selected);
     const imgSel = img.find(l => l.selected);
     if (vidSel && imgSel) return (vidSel.el.compareDocumentPosition(imgSel.el) & 4) ? "video" : "image";
     if (vidSel) return "video";
     if (imgSel) return "image";
-    if (vid.length) return "video";
-    if (img.length) return "image";
+    // 有模式標籤存在但都沒有選中狀態：無法確定，回 null 讓 ensureOutputMode 不亂切換
     return null;
   }
 
@@ -1348,19 +1354,17 @@
       if (!retry) throw new Error("prompt fill retry failed");
     }
 
-    // 3. Auto character / voice hints
-    tryAutoCharacter(item.text);
-    tryAutoVoice(item.text);
-    // 3b. 加入 prompt 中命中的角色卡/素材（依序）
-    await tryAddMatchedAssets(item.text);
-
-    // 4. Set options
-    await sleep(800);
-    // 依模式切換 Flow 的輸出模式（影片/圖片），否則對應選項不會出現
+    // 3. 模式辨識 + UI 設定（依用戶指定步驟順序：填詞後先辨識模式並完成所有 UI 設定）
     const isImageMode = config.mode === "text2image" || config.mode === "image2image";
     const detectedMode = detectFlowPanelMode();
-    if (detectedMode) { const want = isImageMode ? "image" : "video"; if (detectedMode === want) log("Panel mode OK:", want); else log("Panel mode mismatch: UI shows", detectedMode, "while config wants", want); }
-    ensureOutputMode(isImageMode ? "image" : "video");
+    log("Panel mode detected:", detectedMode || "unknown", "(config wants", isImageMode ? "image" : "video", ")");
+    if (detectedMode && detectedMode !== (isImageMode ? "image" : "video")) {
+      log("Panel mode mismatch, switching...");
+      ensureOutputMode(isImageMode ? "image" : "video");
+      await sleep(800);
+    } else if (!detectedMode) {
+      log("Panel mode not detectable (tabs may be hidden); continuing with current UI");
+    }
     await sleep(400);
     await setAspect();
     await sleep(300);
@@ -1378,14 +1382,23 @@
     await setOutputs(parseInt(config.outputCount) || 1);
     await sleep(300);
     if (!isImageMode) {
-      // Per-prompt duration override: use the segment's individual duration if set,
-      // otherwise fall back to the global default (config.duration). 圖片無時長。
       const sec = (item && item.duration) || config.duration;
       if (sec) await setDuration(sec);
       await sleep(500);
     }
-
-    // 5. Submit
+    // 4. Auto character / voice hints（角色卡依序加入，在 UI 設定之後）
+    tryAutoCharacter(item.text);
+    tryAutoVoice(item.text);
+    await sleep(300);
+    await tryAddMatchedAssets(item.text);
+    await sleep(500);
+    // 5. 最終檢查：提示詞仍在、按鈕正常，再按創建
+    const finalValue = getValue(findPromptTextarea()).trim();
+    if (!finalValue) {
+      log("Prompt lost after UI steps, refilling for item", item.id);
+      const refilled = await fillPromptText(findPromptTextarea(), cleanPromptText(item.text));
+      if (!refilled) throw new Error("prompt refill failed after UI steps");
+    }
     const submit = findSubmitButton();
     if (!submit) throw new Error("submit button not found");
     click(submit);

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Auto Flow Free",
   "description": "Auto Flow your prompts at scale. Batch generate and auto-download videos and images on Google Flow. 文字轉影片、幀轉影片自動批次處理。",
-  "version": "1.9.44",
+  "version": "1.9.45",
   "permissions": [
     "activeTab",
     "tabs",

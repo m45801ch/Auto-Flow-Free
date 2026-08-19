@@ -5,7 +5,12 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
-## v1.9.44 更新重點
+## v1.9.45 更新重點
+
+- **操作步驟依指定順序重構（processOne 四步驟）**：1.提示詞送入 Flow 輸入框（含空值重驗與補填）→ 2.辨識面板模式（文生圖/文生影片等）並完成所有 UI 設定（模型/比例/秒數/生成數量）→ 3.配對成功的角色卡依序加入（可能有 1 張以上）→ 4.最終檢查提示詞仍在後，才按「創建」送出
+- **送出按鈕防誤點強化（findSubmitButton）**：新增「生成相同/identical character」等文字的絕對排除規則，且整個角色卡容器（含 12 層上層巢狀節點）內的所有按鈕一律排除；若全頁只剩角色卡內按鈕則放棄操作，不再誤點「產生相同角色卡」
+- **模式偵測誤判修正（detectFlowPanelMode）**：模式標籤存在但無明確選中狀態時回傳 null，不再 fallback 誤判為影片模式；並補入「圖片轉影片」等遺漏的模式標籤識別
+
 
 - **重構提示詞填入為模擬真實輸入**：contentEditable 輸入框改用 `document.execCommand('insertText')` 在游標位置真實插入文字（瀏覽器標準編輯 API），讓 Flow 前端框架正確感知輸入；寫入後以 selection/range 驗證，失敗自動改 fallback 直接 range 插入並重試
 - **新增面板模式偵測（detectFlowPanelMode）**：自動辨識目前處於「文生影片 / 圖生影片 / 文生圖片 / 圖生圖片 / 組件轉影片 / 智能體自動化」哪種模式，依模式決定後續 UI 操作路徑
