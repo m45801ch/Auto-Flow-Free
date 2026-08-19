@@ -907,6 +907,33 @@
     return false;
   }
 
+  // v1.9.47：角色選中後，點擊面板上的「添加到提示 / add to prompt」按鈕把角色加入提示詞
+  function findAddToPromptBtn() {
+    const normAl = s => (s || "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    const isAddToPrompt = b => {
+      const t = normAl(b.textContent);
+      const al = normAl(b.getAttribute("aria-label") || "") + " " + normAl(b.getAttribute("title") || "");
+      const joined = (t + " " + al).replace(/[_\-]/g, " ");
+      return /^(添加|加入)到提示/.test(t) || /add.*to.*prompt/.test(joined) || /^(添加|加入)提示|add prompt/i.test(joined);
+    };
+    // 優先：角色庫面板（library）附近的「添加到提示」按鈕（含 panel 內部、底部確認列）
+    const panels = Array.from(document.querySelectorAll("[class*='library'], [class*='asset'], [role='dialog'], [aria-modal='true']"))
+      .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    for (const panel of panels) {
+      const cands = Array.from(panel.querySelectorAll("button, [role='button']"));
+      const add = cands.find(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && !b.disabled && isAddToPrompt(b);
+      });
+      if (add) return add;
+    }
+    // Fallback：全頁可見的「添加到提示」按鈕
+    const all = Array.from(document.querySelectorAll("button, [role='button']")).filter(b => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && !b.disabled && isAddToPrompt(b);
+    });
+    return all[0] || null;
+  }
   // v1.9.46：角色卡選中後，點擊卡片上的「+ / 加入」按鈕把角色加入提示詞
   function tryAddOnCharacterCard(cardEl) {
     const normAl = s => (s || "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -916,7 +943,10 @@
       const al = normAl(b.getAttribute("aria-label") || "") + " " + normAl(b.getAttribute("title") || "");
       return t === "+" || btnRe.test(t + " " + al);
     };
-    // 在卡片內找 + 按鈕；找不到就往上層容器找（限卡片本身的上層 6 層）
+    // v1.9.47 優先：全頁找「添加到提示」按鈕（角色庫面板右下角），真正完成加入
+    const addBtn = findAddToPromptBtn();
+    if (addBtn) { click(addBtn); log("Clicked 添加到提示 button"); return true; }
+    // Fallback：在卡片內找 + 按鈕；找不到就往上層容器找（限卡片本身的上層 6 層）
     let node = cardEl;
     for (let i = 0; node && i < 7; i++) {
       const cands = Array.from(node.querySelectorAll("button, [role='button']"));
@@ -927,7 +957,7 @@
       if (add && add !== cardEl) { click(add); log("Clicked add-on-card button for character card"); return true; }
       node = node.parentElement;
     }
-    log("No add (+) button found on character card; name-click may not insert character into prompt");
+    log("No add-to-prompt or add (+) button found; name-click may not insert character into prompt");
     return false;
   }
 

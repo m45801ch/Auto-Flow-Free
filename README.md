@@ -5,6 +5,11 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.47 更新重點
+
+- **角色加入提示詞修正**：選中角色後自動點擊角色庫面板上的「添加到提示 / add to prompt」按鈕，真正把角色加入提示詞（支援中英文面板文字；該按鈕被禁用時回退到角色卡上的「+」按鈕）
+
+
 ## v1.9.46 更新重點
 
 - **角色卡加入提示詞修正**：選中角色名稱或角色卡後，自動點擊該角色卡上的「+ / 加入」按鈕，真正把角色加入提示詞（不再只點名稱文字）
