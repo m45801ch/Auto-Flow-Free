@@ -5,6 +5,14 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.44 更新重點
+
+- **重構提示詞填入為模擬真實輸入**：contentEditable 輸入框改用 `document.execCommand('insertText')` 在游標位置真實插入文字（瀏覽器標準編輯 API），讓 Flow 前端框架正確感知輸入；寫入後以 selection/range 驗證，失敗自動改 fallback 直接 range 插入並重試
+- **新增面板模式偵測（detectFlowPanelMode）**：自動辨識目前處於「文生影片 / 圖生影片 / 文生圖片 / 圖生圖片 / 組件轉影片 / 智能體自動化」哪種模式，依模式決定後續 UI 操作路徑
+- **UI 設定流程化**：依模式與設定自動選擇模型（Veo 等）、影片比例（16:9/1:1/9:16）、秒數（支援合併選項）、生成數量；找不到設定項時改以文字模糊比對並記錄候選元素供除錯
+- **角色卡依序加入**：配對成功的角色卡依序點擊加入提示詞，找不到時列出 picker 候選元素
+- **送出按鈕防護**：排除角色卡內按鈕，優先選擇專案區主送出按鈕
+
 ## v1.9.43 更新重點
 
 - **修復送出前提示詞驗證誤判（contentEditable 輸入框恆被判為空）**：送出按鈕前的重新驗證原本使用 textarea.value 判斷，但 Flow 的 contentEditable DIV 輸入框沒有 value 屬性，導致恆為空而被誤判、反覆重填仍無法通過。改為使用相容兩種輸入框的取值方式。

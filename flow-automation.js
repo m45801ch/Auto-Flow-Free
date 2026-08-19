@@ -93,48 +93,30 @@
 
   async function typeInto(textarea, text) {
     try {
+      // contentEditable DIV (Flow's prompt box): use the real
+      // document.execCommand('insertText') path so the frontend framework
+      // (React/Flow) registers the change natively, including undo history
+      // and selection. Fall back to manual InputEvent dispatch if execCommand
+      // is unavailable or returns false.
       if (isCE(textarea)) {
-        // Flow uses a contentEditable DIV for the prompt box; the value
-        // setter does not exist on DIVs — set text directly and fire input.
         textarea.focus();
-        // Clear existing content (select all + beforeinput/deleteContentBackward)
-        textarea.dispatchEvent(new InputEvent("beforeinput", {
-          inputType: "deleteContentBackward",
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        }));
-        textarea.textContent = "";
-        textarea.dispatchEvent(new InputEvent("input", {
-          inputType: "deleteContentBackward",
-          bubbles: true,
-          composed: true,
-        }));
-        for (const ch of text) {
-          const allowed = textarea.dispatchEvent(
-            new InputEvent("beforeinput", {
-              inputType: "insertText",
-              data: ch,
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-            })
-          );
-          if (!allowed) return false;
-          textarea.textContent += ch;
-          textarea.dispatchEvent(
-            new InputEvent("input", {
-              inputType: "insertText",
-              data: ch,
-              bubbles: true,
-              composed: true,
-            })
-          );
-          if (text.length > 100) await sleep(2);
+        const sel = window.getSelection();
+        const range = document.createRange();
+        try {
+          range.selectNodeContents(textarea);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } catch (e) { /* selection unsupported */ }
+        const didCommand = execInsert(text);
+        if (didCommand) {
+          textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+          textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+          return true;
         }
-        textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-        return true;
+        // Fallback: manual dispatch path (older path kept for robustness)
+        return await typeIntoCEFallback(textarea, text);
       }
+      // textarea branch
       const proto = Object.getPrototypeOf(textarea);
       const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
       setter.call(textarea, "");
@@ -159,7 +141,6 @@
             composed: true,
           })
         );
-        // Tiny delay keeps aggressive rate-limiters/validators happy
         if (text.length > 100) await sleep(2);
       }
       textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
@@ -169,6 +150,60 @@
       return false;
     }
   }
+  // execCommand insertText wrapper — returns true when the browser accepted it
+  function execInsert(text) {
+    try {
+      if (document.queryCommandSupported && document.queryCommandSupported("insertText")) {
+        return !!document.execCommand("insertText", false, text);
+      }
+      // Fallback: direct range insertion (also works in jsdom / non-visual contexts)
+      const sel = window.getSelection();
+      const range = document.createRange();
+      if (sel.rangeCount === 0 || !sel.anchorNode) {
+        const host = (document.activeElement && (document.activeElement.isContentEditable === true))
+          ? document.activeElement : document.body;
+        range.selectNodeContents(host);
+      } else {
+        range.selectNodeContents(sel.anchorNode);
+      }
+      sel.removeAllRanges();
+      sel.addRange(range);
+      const txt = document.createTextNode(text);
+      range.deleteContents();
+      range.insertNode(txt);
+      range.setStartAfter(txt);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    } catch (e) { return false; }
+  }
+  async function typeIntoCEFallback(textarea, text) {
+    try {
+      textarea.focus();
+      textarea.textContent = "";
+      for (const ch of text) {
+        const allowed = textarea.dispatchEvent(
+          new InputEvent("beforeinput", {
+            inputType: "insertText",
+            data: ch,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          })
+        );
+        if (!allowed) return false;
+        textarea.textContent += ch;
+        textarea.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: ch, bubbles: true, composed: true }));
+        if (text.length > 100) await sleep(2);
+      }
+      textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      return true;
+    } catch (e) {
+      log("typeIntoCEFallback failed:", e.message);
+      return false;
+    }
+  }
+
   async function fillPromptText(textarea, text) {
     const clean = cleanPromptText(text);
     if (!clean) {
@@ -389,21 +424,35 @@
 
   // --------------- Select dropdown option ---------------
   function selectByText(text) {
-    // 1) leaf 元素精確比對（名稱本身是獨立文字）
+    // 1) 可見 leaf 精確比對（含 dropdown/menu/popup 內的選項）
+    const norm = s => (s || "").replace(/[\s\u00a0]+/g, " ").trim();
     const leaves = Array.from(document.querySelectorAll("*")).filter(
-      el => el.children.length === 0 && (el.textContent || "").trim() === text);
+      el => el.children.length === 0 && norm(el.textContent) === norm(text));
     for (const el of leaves) { if (click(el)) return true; }
-    // 2) 可點擊元素（button/option/tab/radio/li）精確比對，處理含子元素的選項
+    // 2) 可點擊元素精確比對
     const clickables = Array.from(document.querySelectorAll(
       "button, [role='button'], [role='option'], [role='tab'], [role='radio'], li, a"
     )).filter(el => {
       const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0 && (el.textContent || "").trim() === text;
+      return r.width > 0 && r.height > 0 && norm(el.textContent) === norm(text);
     });
     for (const el of clickables) { if (click(el)) return true; }
+    // 3) 寬鬆比對：leaf 文字包含目標（處理「8秒 (合併)」等變體）
+    const loose = Array.from(document.querySelectorAll("*")).filter(
+      el => el.children.length === 0 && norm(el.textContent).includes(norm(text)));
+    for (const el of loose) { if (click(el)) return true; }
     return false;
   }
-
+  // 依標籤關鍵字點擊展開某個下拉（如比例/秒數/模型 dropdown），為 selectByText 做準備
+  function openDropdown(labelRe) {
+    const norm = s => (s || "").replace(/[\s\u00a0]+/g, " ").trim();
+    const btns = Array.from(document.querySelectorAll("button, [role='button']")).filter(b => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && labelRe.test(norm(b.textContent) + " " + norm(b.getAttribute("aria-label") || ""));
+    });
+    for (const b of btns) { if (click(b)) { log("Opened dropdown:", norm(b.textContent)); return true; } }
+    return false;
+  }
   // --------------- DataURL to File (for checkpoint-resumed frames) ---------------
   async function dataURLToFile(dataURL, name) {
     const resp = await fetch(dataURL);
@@ -530,6 +579,33 @@
 
   // 切換 Flow 輸入框下方的「影片/圖片」輸出模式開關。
   // kind: "video" | "image"。若停在錯誤模式，對應選項（比例、模型、時長）不會出現。
+  // 偵測目前 Flow 面板模式：比對選中 tab、面板標題與側欄項目文字
+  // 回傳 "video" | "image" | null（無法判斷）
+  function detectFlowPanelMode() {
+    const norm = s => (s || "").replace(/[\s\u00a0]+/g, " ").trim().toLowerCase();
+    const isTabSelected = el =>
+      el.getAttribute("aria-selected") === "true" ||
+      el.getAttribute("aria-pressed") === "true" ||
+      /active|selected/.test(el.className || "");
+    const seen = new Set();
+    const labels = Array.from(document.querySelectorAll(
+      "button, [role='tab'], [role='radio'], li, a, [class*='active']"
+    )).map(el => ({ t: norm(el.textContent), selected: isTabSelected(el), el }));
+    const pick = re => labels.find(l => re.test(l.t) && (l.selected || l.el.children.length === 0));
+    const videoRe = /文字轉影片|文字转视频|text to video|幀數轉影片|幀轉影片|帧数转视频|帧转视频|frames? to video|組件轉視頻|組件轉影片|组件转视频|components to video|智能體自動化|智能体自动化|agent/;
+    const imageRe = /文字轉圖片|文字转图片|text to image|圖片轉圖片|图片转图片|image to image/;
+    const vid = labels.filter(l => videoRe.test(l.t) && !imageRe.test(l.t));
+    const img = labels.filter(l => imageRe.test(l.t) && !videoRe.test(l.t));
+    const vidSel = vid.find(l => l.selected);
+    const imgSel = img.find(l => l.selected);
+    if (vidSel && imgSel) return (vidSel.el.compareDocumentPosition(imgSel.el) & 4) ? "video" : "image";
+    if (vidSel) return "video";
+    if (imgSel) return "image";
+    if (vid.length) return "video";
+    if (img.length) return "image";
+    return null;
+  }
+
   function ensureOutputMode(kind) {
     const isVisible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     const norm = s => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -553,24 +629,32 @@
       else log("Already in", kind, "mode");
       return true;
     }
+    const detected = detectFlowPanelMode();
+    if (detected === kind) { log("Output mode detected via panel:", kind, "(toggle hidden in UI)"); return true; }
     log(kind, "mode toggle not found. Toggle candidates:", JSON.stringify(btns.map(b => norm(b.textContent) || norm(b.getAttribute("aria-label") || "")).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).slice(0, 20)));
-    return false;
+    return detected !== null;
   }
 
-  function setAspect() {
+  async function setAspect() {
     if (!config.aspect) return;
+    // Try clicking any dropdown/popup that shows the current ratio first
+    openDropdown(/比例|長寬比|画幅比|Aspect ratio|aspect/i);
+    await sleep(400);
     const btns = findAspectRatioButtons();
     for (const b of btns) {
-      if ((b.textContent || "").trim() === config.aspect) {
-        click(b);
-        log("Aspect set to", config.aspect);
-        return;
-      }
+      if (normText(b.textContent) === config.aspect) { click(b); log("Aspect set to", config.aspect); return; }
+    }
+    // Loose: option text contains the ratio (e.g. "16:9 橫向")
+    for (const b of btns) {
+      if (normText(b.textContent).includes(config.aspect)) { click(b); log("Aspect set to", config.aspect); return; }
     }
     logOptionCandidates("Aspect not found. Ratio candidates:", btns);
   }
+  function normText(t) { return (t || "").replace(/[\s\u00a0]+/g, " ").trim(); }
+  async function setModel() {
+    openDropdown(/模型|模型選擇|Model|model|veo/i);
+    await sleep(400);
 
-  function setModel() {
     if (!config.model) return;
     const map = {
       "veo3.1-lite": "Veo 3.1 Lite",
@@ -587,7 +671,10 @@
   }
 
   // Image model selector (Nano Banana Pro / 2 / 2 Lite) for image modes
-  function setImageModel() {
+  async function setImageModel() {
+    openDropdown(/模型|Model|model|banana/i);
+    await sleep(400);
+
     if (!config.imageModel) return;
     const map = {
       "nano-banana-pro": "Nano Banana Pro",
@@ -608,26 +695,29 @@
     else log("Image mode not found in UI:", label);
   }
 
-  function setOutputs(n) {
+  async function setOutputs(n) {
+    openDropdown(/數量|数量|個數|Outputs?|output/i);
+    await sleep(400);
+
     selectByText(String(n));
   }
 
-  function setDuration(sec) {
-    // Supports: plain seconds ("8"), merged durations ("4-merge" → "4秒(合併)"), plain zh forms ("8秒")
+  async function setDuration(sec) {
+    // Supports: plain seconds ("8"), merged durations ("4-merge" -> "4秒(合併)"), plain zh forms ("8秒")
     const v = String(sec);
     let candidates = [v];
     if (/^(\d+)-merge$/i.test(v)) {
       const base = v.replace(/-merge$/i, "");
-      candidates = [base + "秒(合併)", base + "秒 (合併)"];
+      candidates = [base + "秒(合併)", base + "秒 (合併)", base + "秒(合并)", base + "秒 (合并)"];
     } else if (/^\d+$/.test(v)) {
       candidates = [v + "秒"];
     }
-    for (const c of candidates) {
-      if (selectByText(c)) { log("Duration set to", c); return; }
-    }
+    // Try opening the duration dropdown first (labels vary by UI language)
+    openDropdown(/秒數|時長|时长|影片秒數|视频秒数|Duration|秒/i);
+    await sleep(400);
+    for (const c of candidates) { if (selectByText(c)) { log("Duration set to", c); return; } }
     log("Duration not found:", candidates[0], "available:", JSON.stringify(optionLabels(15)));
   }
-
   // --------------- 新增命中的素材（按輸入框右下角的「+」） ---------------
   // 開啟 Flow 的素材/角色選擇器，把 prompt 中命中的角色名稱對應的項目點選加入。
   // 每一步都盡量安全：找不到就略過，開啟後無法完成就按 Escape 關閉，避免卡住流程。
@@ -674,7 +764,11 @@
       const hit = items.find(el => {
         const t = norm(el.textContent);
         const al = norm(el.getAttribute("alt") || "") + " " + norm(el.getAttribute("aria-label") || "");
-        return t === nn || t.split(/[\s,，、;；|\/]+/).includes(nn) || al === nn;
+        const joined = (t + " " + al).replace(/[_-]/g, " ");
+        return joined === nn ||
+          joined.split(/[\s,，、;；|\/]+/).includes(nn) ||
+          nn.split(/[\s,，、;；|\/]+/).filter(Boolean).every(tk => joined.includes(tk)) ||
+          al === nn;
       });
       if (hit) {
         click(hit);
@@ -685,8 +779,13 @@
     }
     if (clickedCount === 0) {
       log("No matching asset items in picker for:", JSON.stringify(chars));
-      pressEscape();
-      return;
+      // Fallback: try matching against role card thumbnails anywhere on the page (e.g. sidebar role cards)
+      const allCards = Array.from(document.querySelectorAll("img, [class*='card'], [role='button']")).filter(el => {
+        const al = norm(el.getAttribute("alt") || "") + " " + norm(el.getAttribute("aria-label") || "");
+        return chars.some(name => normText(al).split(/[\s,，、;；|\/]+/).includes(norm(name)) || normText(el.textContent).split(/[\s,，、;；|\/]+/).includes(norm(name)));
+      });
+      for (const card of allCards.slice(0, chars.length)) { click(card); clickedCount++; await sleep(300); log("Added card:", card.getAttribute("alt") || card.getAttribute("aria-label") || "(untitled)"); }
+      if (clickedCount === 0) { pressEscape(); return; }
     }
     // 4) 確認並關閉選擇器
     const confirmBtn = Array.from(picker.querySelectorAll("button")).find(b => {
@@ -1252,35 +1351,37 @@
     // 3. Auto character / voice hints
     tryAutoCharacter(item.text);
     tryAutoVoice(item.text);
-    // 3b. 按輸入框右下角的「+」新增 prompt 中命中的素材
+    // 3b. 加入 prompt 中命中的角色卡/素材（依序）
     await tryAddMatchedAssets(item.text);
 
     // 4. Set options
     await sleep(800);
     // 依模式切換 Flow 的輸出模式（影片/圖片），否則對應選項不會出現
     const isImageMode = config.mode === "text2image" || config.mode === "image2image";
+    const detectedMode = detectFlowPanelMode();
+    if (detectedMode) { const want = isImageMode ? "image" : "video"; if (detectedMode === want) log("Panel mode OK:", want); else log("Panel mode mismatch: UI shows", detectedMode, "while config wants", want); }
     ensureOutputMode(isImageMode ? "image" : "video");
     await sleep(400);
-    setAspect();
+    await setAspect();
     await sleep(300);
     if (isImageMode) {
       // 圖片模式：圖片模型與來源
-      if (config.imageModel) setImageModel();
+      if (config.imageModel) await setImageModel();
       await sleep(300);
       if (config.imageMode) setImageMode();
       await sleep(300);
     } else {
       // 影片模式（文字轉影片/幀數轉影片/組件轉影片/智慧體自動化）：影片模型
-      setModel();
+      await setModel();
       await sleep(300);
     }
-    setOutputs(parseInt(config.outputCount) || 1);
+    await setOutputs(parseInt(config.outputCount) || 1);
     await sleep(300);
     if (!isImageMode) {
       // Per-prompt duration override: use the segment's individual duration if set,
       // otherwise fall back to the global default (config.duration). 圖片無時長。
       const sec = (item && item.duration) || config.duration;
-      if (sec) setDuration(sec);
+      if (sec) await setDuration(sec);
       await sleep(500);
     }
 
