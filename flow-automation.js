@@ -278,6 +278,17 @@
     // Flow 的送出/生成按鈕標籤涵蓋中英文：生成、產生、送出、提交、執行、建立、Generate、Create、Submit、Run…
     const labelRe = /generate|生成|產生|送出|提交|執行|建立|create|submit|run/i;
     const describe = b => (b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    // 排除角色卡內的按鈕（如「產生相同角色卡」），它們只是卡片工具按鈕而非專案送出按鈕
+    const isInsideCharacterCard = b => {
+      let n = b;
+      for (let i = 0; n && i < 10; i++) {
+        n = n.parentElement;
+        if (!n) return false;
+        const cls = (n.className || "") + " " + (n.getAttribute && n.getAttribute("aria-label") || "");
+        if (/角色卡|character[- ]?card|角色/.test(cls) && /生成相同|generate.*identical|identical|相同角色|複製|duplicate/i.test(cls + " " + describe(b))) return true;
+      }
+      return false;
+    };
 
     // 1) 優先從提示詞輸入框附近的按鈕找（同在一個 dialog/panel 內）
     const ta = findPromptTextarea();
@@ -288,6 +299,7 @@
         if (!node) break;
         const nearby = Array.from(node.querySelectorAll("button, [role='button']"))
           .filter(isVisibleBtn)
+          .filter(b => !isInsideCharacterCard(b))
           .find(b => labelRe.test(b.textContent || ""));
         if (nearby) {
           log("Submit button (near prompt):", describe(nearby));
@@ -296,9 +308,10 @@
       }
     }
 
-    // 2) 全頁搜尋可見按鈕
+    // 2) 全頁搜尋可見按鈕（優先非角色卡內的按鈕）
     const buttons = Array.from(document.querySelectorAll("button, [role='button']")).filter(isVisibleBtn);
-    const btn = buttons.find(b => labelRe.test(b.textContent || "")) || buttons[buttons.length - 1];
+    const pageButtons = buttons.filter(b => !isInsideCharacterCard(b));
+    const btn = (pageButtons.find(b => labelRe.test(b.textContent || "")) || buttons.find(b => labelRe.test(b.textContent || ""))) || pageButtons[pageButtons.length - 1] || buttons[buttons.length - 1];
     log("Submit button:", btn ? describe(btn) : "none");
     return btn || null;
   }
@@ -1230,7 +1243,7 @@
     const filled = await fillPromptText(textarea, cleanPromptText(item.text));
     if (!filled) throw new Error("prompt fill failed");
     // Re-verify before submitting; if Flow cleared the value, refill once
-    if (!textarea.value || !textarea.value.trim()) {
+    if (!getValue(textarea).trim()) {
       log("Prompt value empty after fill, retrying for item", item.id);
       const retry = await fillPromptText(textarea, cleanPromptText(item.text));
       if (!retry) throw new Error("prompt fill retry failed");
