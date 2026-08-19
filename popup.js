@@ -1210,6 +1210,12 @@ function bindUI() {
       updateModeUI();
     });
   });
+  // 載入時根據 settings.mode 還原按鈕的 active 狀態
+  const savedModeBtn = document.querySelector('.mode-btn[data-mode="' + settings.mode + '"]');
+  if (savedModeBtn) {
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+    savedModeBtn.classList.add("active");
+  }
 
   // Concurrency
   const conc = document.getElementById("concurrency");
