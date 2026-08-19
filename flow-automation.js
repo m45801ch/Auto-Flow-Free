@@ -56,7 +56,7 @@
   // --------------- Utility: set native input value ---------------
   function setNativeValue(el, value) {
     // Flow 偶爾會改用 contentEditable 富文字編輯器當作 prompt 輸入框
-    if (el && el.isContentEditable) {
+    if (isCE(el)) {
       el.focus();
       el.textContent = value;
       el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
@@ -72,8 +72,69 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function isCE(el) {
+    // ContentEditable element: prefer the standard property, fall back to
+    // the contenteditable attribute (needed in environments where
+    // isContentEditable is missing, e.g. jsdom-based tests).
+    if (el && el.isContentEditable === true) return true;
+    if (el && el.getAttribute) {
+      const a = el.getAttribute("contenteditable");
+      if (a !== null && a.toLowerCase() !== "false") return true;
+    }
+    return false;
+  }
+
+  function getValue(el) {
+    // Inputs/textareas expose .value; Flow's contentEditable editors are DIVs
+    // without .value, so read the editable text instead.
+    if (el && el.value !== undefined) return el.value;
+    return (el && (el.textContent || "")) || "";
+  }
+
   async function typeInto(textarea, text) {
     try {
+      if (isCE(textarea)) {
+        // Flow uses a contentEditable DIV for the prompt box; the value
+        // setter does not exist on DIVs — set text directly and fire input.
+        textarea.focus();
+        // Clear existing content (select all + beforeinput/deleteContentBackward)
+        textarea.dispatchEvent(new InputEvent("beforeinput", {
+          inputType: "deleteContentBackward",
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }));
+        textarea.textContent = "";
+        textarea.dispatchEvent(new InputEvent("input", {
+          inputType: "deleteContentBackward",
+          bubbles: true,
+          composed: true,
+        }));
+        for (const ch of text) {
+          const allowed = textarea.dispatchEvent(
+            new InputEvent("beforeinput", {
+              inputType: "insertText",
+              data: ch,
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+            })
+          );
+          if (!allowed) return false;
+          textarea.textContent += ch;
+          textarea.dispatchEvent(
+            new InputEvent("input", {
+              inputType: "insertText",
+              data: ch,
+              bubbles: true,
+              composed: true,
+            })
+          );
+          if (text.length > 100) await sleep(2);
+        }
+        textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        return true;
+      }
       const proto = Object.getPrototypeOf(textarea);
       const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
       setter.call(textarea, "");
@@ -123,15 +184,16 @@
       ok = true;
     }
     await sleep(400);
-    // Verify Flow actually registered the value
-    if (!textarea.value || !textarea.value.trim()) {
-      log("Textarea still empty after fill, retrying once...");
+    // Verify Flow actually registered the value (works for both textarea and
+    // contentEditable DIV)
+    if (!getValue(textarea).trim()) {
+      log("Prompt input still empty after fill, retrying once...");
       textarea.focus();
       const ok2 = await typeInto(textarea, clean);
       if (!ok2) setNativeValue(textarea, clean);
       await sleep(400);
-      if (!textarea.value || !textarea.value.trim()) {
-        logError("Textarea still empty after retry; Flow may not detect the prompt");
+      if (!getValue(textarea).trim()) {
+        logError("Prompt input still empty after retry; Flow may not detect the prompt");
         return false;
       }
     }

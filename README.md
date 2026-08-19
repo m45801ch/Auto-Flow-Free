@@ -5,6 +5,10 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.42 更新重點
+
+- **修復提示詞無法填入 Flow 輸入框的問題（顯示「請輸入提示詞」、按不出創建影片按鈕）**：Google Flow 目前已改用 contentEditable 的 DIV 富文字編輯器作為提示詞輸入框。本次更新讓自動填入邏輯同時支援 textarea 與 contentEditable 輸入框：對 DIV 輸入框改用逐字元直接寫入文字內容並觸發 beforeinput（insertText）與 input 事件，讓 Flow 的前端框架正確偵測到輸入；同時改進輸入框偵測，相容 isContentEditable 屬性與 contenteditable 屬性兩種環境；送出前自動驗證提示詞是否真正寫入成功。
+
 ## v1.9.40 更新重點
 
 - **所有模式都會先切換 Flow 的輸出模式**：文字轉影片／幀數轉影片／組件轉影片／智慧體自動化 → 切到「影片」；文字轉圖片／圖片轉圖片 → 切到「圖片」。確保比例、模型、張數等對應選項出現
