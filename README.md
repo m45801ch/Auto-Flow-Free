@@ -5,6 +5,12 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.46 更新重點
+
+- **角色卡加入提示詞修正**：選中角色名稱或角色卡後，自動點擊該角色卡上的「+ / 加入」按鈕，真正把角色加入提示詞（不再只點名稱文字）
+- **送出按鈕排除媒體卡片**：排除「视频 · 720pcrop」等媒體卡片偽按鈕文字，且不再 fallback 到任意按鈕；找不到真正的創建按鈕時放棄操作
+
+
 ## v1.9.45 更新重點
 
 - **操作步驟依指定順序重構（processOne 四步驟）**：1.提示詞送入 Flow 輸入框（含空值重驗與補填）→ 2.辨識面板模式（文生圖/文生影片等）並完成所有 UI 設定（模型/比例/秒數/生成數量）→ 3.配對成功的角色卡依序加入（可能有 1 張以上）→ 4.最終檢查提示詞仍在後，才按「創建」送出

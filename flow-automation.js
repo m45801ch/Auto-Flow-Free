@@ -315,6 +315,9 @@
     const describe = b => (b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
     // 排除角色卡內的按鈕（如「產生相同角色卡」），它們只是卡片工具按鈕而非專案送出按鈕
     const bannedBtnText = /生成相同|產生相同|generat.*identical|identical character|相同角色|複製角色|duplicate character/i;
+    // v1.9.46：排除媒體卡片/生成結果/縮圖等偽按鈕文字（如「视频 · 720pcrop_9_16x1」）
+    const mediaCardText = /视频\s*[·•]?\s*\d|影片\s*[·•]?\s*\d|video\s*[·•]?\s*\d|pcrop|\d{3,4}x\d{3,4}/i;
+    const isMediaCardText = b => mediaCardText.test(describe(b));
     const isInsideCharacterCard = b => {
       // 絕對排除：按鈕本身文字命中「產生相同角色卡」等，不管它在哪
       if (bannedBtnText.test(describe(b))) return true;
@@ -339,6 +342,7 @@
         const nearby = Array.from(node.querySelectorAll("button, [role='button']"))
           .filter(isVisibleBtn)
           .filter(b => !isInsideCharacterCard(b))
+          .filter(b => !isMediaCardText(b))
           .find(b => labelRe.test(b.textContent || ""));
         if (nearby) {
           log("Submit button (near prompt):", describe(nearby));
@@ -347,14 +351,14 @@
       }
     }
 
-    // 2) 全頁搜尋可見按鈕（優先非角色卡內的按鈕）
+    // 2) 全頁搜尋可見按鈕（優先非角色卡內且非媒體卡片文字的按鈕；v1.9.46：不再 fallback 到任意按鈕）
     const buttons = Array.from(document.querySelectorAll("button, [role='button']")).filter(isVisibleBtn);
-    const pageButtons = buttons.filter(b => !isInsideCharacterCard(b));
-    const pageBtn = pageButtons.find(b => labelRe.test(b.textContent || "")) || pageButtons[pageButtons.length - 1];
-    const btn = pageBtn || buttons.find(b => labelRe.test(b.textContent || "")) || buttons[buttons.length - 1];
-    if (btn && isInsideCharacterCard(btn)) { log("All candidates are inside character cards; no submit button"); return null; }
+    const pageButtons = buttons.filter(b => !isInsideCharacterCard(b) && !isMediaCardText(b));
+    const pageBtn = pageButtons.find(b => labelRe.test(b.textContent || "")) || null;
+    const btn = pageBtn || buttons.filter(b => !isInsideCharacterCard(b) && !isMediaCardText(b) && labelRe.test(b.textContent || ""))[0] || null;
+    if (!btn) { log("All candidates are inside character cards or media cards; no submit button"); return null; }
     log("Submit button:", btn ? describe(btn) : "none");
-    return btn || null;
+    return btn;
   }
 
   function findAspectRatioButtons() {
@@ -860,7 +864,12 @@
       .filter(el => el.children.length === 0);
     for (const el of leaves) {
       if (normText(el.textContent) === nnorm) {
-        if (click(el)) { log("Character text clicked:", nn); return true; }
+        if (click(el)) {
+          log("Character text clicked:", nn);
+          // v1.9.46：點名後，嘗試點擊該角色卡上的「+ / 加入」按鈕真正加入提示詞
+          tryAddOnCharacterCard(el);
+          return true;
+        }
       }
     }
 
@@ -880,7 +889,12 @@
     }
     cards.sort((a, b) => ((a.textContent || "").length - (b.textContent || "").length));
     for (const card of cards) {
-      if (click(card)) { log("Character card clicked:", nn); return true; }
+      if (click(card)) {
+        log("Character card clicked:", nn);
+        // v1.9.46：點卡後，嘗試點擊卡片上的「+ / 加入」按鈕真正加入提示詞
+        tryAddOnCharacterCard(card);
+        return true;
+      }
     }
 
     // Strategy 3: 可點擊元素其文字正好等於名稱。
@@ -890,6 +904,30 @@
       }
     }
 
+    return false;
+  }
+
+  // v1.9.46：角色卡選中後，點擊卡片上的「+ / 加入」按鈕把角色加入提示詞
+  function tryAddOnCharacterCard(cardEl) {
+    const normAl = s => (s || "").replace(/_/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+    const btnRe = /^\+$|^add$|^新增$|^添加$|^加入$|^attach$|\badd\b|\b新增\b|\b添加\b|\b加入\b/i;
+    const isAddBtn = b => {
+      const t = (b.textContent || "").trim();
+      const al = normAl(b.getAttribute("aria-label") || "") + " " + normAl(b.getAttribute("title") || "");
+      return t === "+" || btnRe.test(t + " " + al);
+    };
+    // 在卡片內找 + 按鈕；找不到就往上層容器找（限卡片本身的上層 6 層）
+    let node = cardEl;
+    for (let i = 0; node && i < 7; i++) {
+      const cands = Array.from(node.querySelectorAll("button, [role='button']"));
+      const add = cands.filter(b => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && isAddBtn(b);
+      }).sort((a, b) => a.textContent.length - b.textContent.length)[0];
+      if (add && add !== cardEl) { click(add); log("Clicked add-on-card button for character card"); return true; }
+      node = node.parentElement;
+    }
+    log("No add (+) button found on character card; name-click may not insert character into prompt");
     return false;
   }
 
