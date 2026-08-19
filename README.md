@@ -5,6 +5,12 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.48 更新重點
+
+- **比例選單對應 UI**：比例白名單擴充為 16:9 / 9:16 / 1:1 / 4:3 / 3:4 / 16:10 / 21:9 等，圖片模式支援 4:3、3:4 等全部比例
+- **生成數量 x1~x4 修正**：改為直接精確點擊「x1 / x2 / x3 / x4」pill 按鈕，並排除底部「视频 · 720p  x1」等媒體 pill 誤點
+- **影片模式「帧 / 素材」子模式**：文字轉影片自動選「素材」、帧數轉影片自動選「帧」pill（支援中英文）
+
 ## v1.9.47 更新重點
 
 - **角色加入提示詞修正**：選中角色後自動點擊角色庫面板上的「添加到提示 / add to prompt」按鈕，真正把角色加入提示詞（支援中英文面板文字；該按鈕被禁用時回退到角色卡上的「+」按鈕）

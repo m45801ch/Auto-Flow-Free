@@ -362,8 +362,10 @@
   }
 
   function findAspectRatioButtons() {
+    // v1.9.48：比例白名單擴充（截圖 UI：圖片模式 16:9/4:3/1:1/3:4/9:16，影片模式 9:16/16:9）
+    const ratios = ["16:9", "9:16", "1:1", "4:3", "3:4", "16:10", "10:16", "21:9", "9:21", "3:2", "2:3", "4:5", "5:4"];
     return Array.from(document.querySelectorAll("button, [role='button']")).filter(el =>
-      ["16:9", "1:1", "9:16"].includes((el.textContent || "").trim()));
+      ratios.includes((el.textContent || "").trim()));
   }
 
   function findModelOptions() {
@@ -705,13 +707,53 @@
     else log("Image mode not found in UI:", label);
   }
 
+  // v1.9.48：數量是「x1/x2/x3/x4」小 pill 按鈕，直接精確點擊，避免誤點底部「视频 · 720p  x1」
   async function setOutputs(n) {
-    openDropdown(/數量|数量|個數|Outputs?|output/i);
+    openDropdown(/數量|数量|個數|Outputs?|output|×|x\d+/i);
     await sleep(400);
 
-    selectByText(String(n));
+    const target = String(n);
+    const norm = s => (s || "").replace(/[\s\u00a0]+/g, " ").trim();
+    const isMediaLike = el => {
+      const t = norm(el.textContent) + " " + norm(el.getAttribute("aria-label") || "") + " " + norm(el.getAttribute("title") || "");
+      return /pcrop|·|视频 ·|影片 ·|720p|1080p|2k|4k/i.test(t);
+    };
+    const isVisible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    // 1) 精確比對 visible leaf 文字「x{n}」
+    const leaves = Array.from(document.querySelectorAll("*")).filter(
+      el => el.children.length === 0 && norm(el.textContent) === "x" + target && isVisible(el));
+    for (const el of leaves) { if (!isMediaLike(el) && click(el)) { log("Outputs set to x" + target); return; } }
+    // 2) 可點擊元素精確比對
+    const clickables = Array.from(document.querySelectorAll(
+      "button, [role='button'], [role='option'], [role='radio'], li"
+    )).filter(el => isVisible(el) && norm(el.textContent) === "x" + target && !isMediaLike(el));
+    for (const el of clickables) { if (click(el)) { log("Outputs set to x" + target); return; } }
+    // 3) 寬鬆比對：文字包含「x{n}」（排除媒體類元素）
+    const loose = Array.from(document.querySelectorAll("button, [role='button']")).filter(
+      el => isVisible(el) && norm(el.textContent).includes("x" + target) && !isMediaLike(el));
+    for (const el of loose) { if (click(el)) { log("Outputs set to x" + target); return; } }
+    log("Outputs x" + target + " not found. Available:", JSON.stringify(optionLabels(15)));
   }
 
+  // v1.9.48：影片模式「幀 / 素材」子模式（zh-CN「帧 / 素材」、zh-TW「帧 / 素材 / 素材」）
+  function ensureVideoSubMode() {
+    const isVisible = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const norm = s => (s || "").replace(/[\s\u00a0]+/g, " ").trim();
+    const wantsFrame = config.mode === "frame2video";
+    const pills = Array.from(document.querySelectorAll("button, [role='button'], [role='tab']")).filter(b => {
+      const t = norm(b.textContent);
+      return t === "帧" || t === "帧数" || t === "素材" || t === "幀" || t === "幀数";
+    }).filter(isVisible);
+    if (pills.length === 0) { log("Frame/asset sub-mode pills not found (may not apply to this panel)"); return false; }
+    const target = pills.find(p => wantsFrame ? /^(帧|幀)/.test(norm(p.textContent)) : norm(p.textContent) === "素材");
+    if (!target) { log("Video sub-mode target not found for mode", config.mode); return false; }
+    const active = target.getAttribute("aria-pressed") === "true" ||
+      target.getAttribute("aria-selected") === "true" ||
+      target.classList.contains("active") || target.classList.contains("selected");
+    if (!active) { click(target); log("Video sub-mode set to", norm(target.textContent)); }
+    else log("Video sub-mode already:", norm(target.textContent));
+    return true;
+  }
   async function setDuration(sec) {
     // Supports: plain seconds ("8"), merged durations ("4-merge" -> "4秒(合併)"), plain zh forms ("8秒")
     const v = String(sec);
@@ -1445,6 +1487,9 @@
     } else {
       // 影片模式（文字轉影片/幀數轉影片/組件轉影片/智慧體自動化）：影片模型
       await setModel();
+      await sleep(300);
+      // v1.9.48：影片模式「幀 / 素材」子模式切換（截圖：视频 tab 下方有「帧 / 素材」pill）
+      ensureVideoSubMode();
       await sleep(300);
     }
     await setOutputs(parseInt(config.outputCount) || 1);
