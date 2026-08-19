@@ -72,6 +72,72 @@
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  async function typeInto(textarea, text) {
+    try {
+      const proto = Object.getPrototypeOf(textarea);
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      setter.call(textarea, "");
+      for (const ch of text) {
+        const next = textarea.value + ch;
+        const allowed = textarea.dispatchEvent(
+          new InputEvent("beforeinput", {
+            inputType: "insertText",
+            data: ch,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          })
+        );
+        if (!allowed) return false;
+        setter.call(textarea, next);
+        textarea.dispatchEvent(
+          new InputEvent("input", {
+            inputType: "insertText",
+            data: ch,
+            bubbles: true,
+            composed: true,
+          })
+        );
+        // Tiny delay keeps aggressive rate-limiters/validators happy
+        if (text.length > 100) await sleep(2);
+      }
+      textarea.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      return true;
+    } catch (e) {
+      log("typeInto failed:", e.message);
+      return false;
+    }
+  }
+  async function fillPromptText(textarea, text) {
+    const clean = cleanPromptText(text);
+    if (!clean) {
+      logError("Prompt text is empty after cleaning, skipping fill");
+      return false;
+    }
+    textarea.focus();
+    // Try typing character by character first (most reliable for framework
+    // inputs), falling back to a plain native value set.
+    let ok = await typeInto(textarea, clean);
+    if (!ok) {
+      setNativeValue(textarea, clean);
+      ok = true;
+    }
+    await sleep(400);
+    // Verify Flow actually registered the value
+    if (!textarea.value || !textarea.value.trim()) {
+      log("Textarea still empty after fill, retrying once...");
+      textarea.focus();
+      const ok2 = await typeInto(textarea, clean);
+      if (!ok2) setNativeValue(textarea, clean);
+      await sleep(400);
+      if (!textarea.value || !textarea.value.trim()) {
+        logError("Textarea still empty after retry; Flow may not detect the prompt");
+        return false;
+      }
+    }
+    return true;
+  }
+
   // --------------- Click helpers ---------------
   function click(el) {
     if (!el) return false;
@@ -105,9 +171,15 @@
 
   // --------------- Element finders (Google Flow UI) ---------------
   function findPromptTextarea() {
-    const all = Array.from(document.querySelectorAll(
+    // Collect every document root (main document + all shadow roots) — Flow may
+    // render the prompt textarea inside a shadow root.
+    const roots = [document].concat(
+      Array.from(document.querySelectorAll("*")).flatMap(n => n.shadowRoot ? [n.shadowRoot] : [])
+    );
+    const collect = sel => roots.flatMap(root => Array.from(root.querySelectorAll(sel)));
+    const all = collect(
       "textarea, [contenteditable='true'], [contenteditable='plaintext-only'], [contenteditable='']"
-    ));
+    );
     const isVisible = el => {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 &&
@@ -133,7 +205,6 @@
     if (visible.length > 0) return visible[0];
     return all[0] || null;
   }
-
   function findSubmitButton() {
     // 只考慮可見且未停用的按鈕，避免點到隱藏的 UI 按鈕
     const isVisibleBtn = b => {
@@ -1090,12 +1161,18 @@
       if (!ok) throw new Error("input image upload failed");
     }
 
-    // 2. Fill prompt
+    // 2. Fill prompt (v1.9.32: typed-char input so Flow's framework detects the value)
     const textarea = findPromptTextarea();
     if (!textarea) throw new Error("prompt textarea not found");
     log("Prompt input:", textarea.tagName, "ce=" + textarea.isContentEditable, "placeholder=" + JSON.stringify(textarea.getAttribute("placeholder") || ""));
-    textarea.focus();
-    setNativeValue(textarea, cleanPromptText(item.text));
+    const filled = await fillPromptText(textarea, cleanPromptText(item.text));
+    if (!filled) throw new Error("prompt fill failed");
+    // Re-verify before submitting; if Flow cleared the value, refill once
+    if (!textarea.value || !textarea.value.trim()) {
+      log("Prompt value empty after fill, retrying for item", item.id);
+      const retry = await fillPromptText(textarea, cleanPromptText(item.text));
+      if (!retry) throw new Error("prompt fill retry failed");
+    }
 
     // 3. Auto character / voice hints
     tryAutoCharacter(item.text);
