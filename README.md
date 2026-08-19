@@ -5,6 +5,24 @@ Auto Flow Free (formerly Flow Automation) is an Auto Veo, Auto Flow tool built t
 GitHub 倉庫：[m45801ch/Auto-Flow-Free](https://github.com/m45801ch/Auto-Flow-Free)
 版本更新紀錄請見 [GitHub Releases](https://github.com/m45801ch/Auto-Flow-Free/releases)。
 
+## v1.9.84 更新重點
+
+- **提示詞填入改用 Slate 編輯器 API**：Flow 的提示詞輸入框是 Slate 編輯器（`data-slate-editor`），先前 execCommand 只改了畫面 DOM、沒更新 Slate 內部狀態，導致 Flow 判定沒有提示詞、送出鍵停用。現在會透過 React fiber 找到 Slate editor，設定 selection 後用 `editor.insertText()` 真正寫入內部狀態（無法取得時才退回 beforeinput/execCommand）
+- **送出按鈕偵測再強化**：優先嚴格選 `arrow_forward创建` 主送出鍵（不再退到 `add_2创建` 加號鍵）；並在除錯日誌列出所有候選按鈕（含停用狀態與位置），若送出鍵停用會明確標示「提示詞可能未被 Flow 辨識」
+
+## v1.9.83 更新重點
+
+- **修復送出按鈕抓錯（抓到角色卡 jade_disc）**：`findSubmitButton` 簡化為直接鎖定真正的 `<button>` 且文字含「创建/送出/生成」等關鍵字（排除取消/更多/搜索等），優先選 `arrow_forward` 主送出鍵；不再依賴視窗比例位置，避免 fallback 到角色卡 `DIV[role=button]`
+
+## v1.9.82 更新重點
+
+- **送出前重新確認並補填提示詞**：中間的模型面板、模式/子頁籤切換、素材 picker 等操作可能把 Flow 的輸入框重渲染而清掉提示詞，導致按「創建」時顯示「請輸入提示詞」。現在送出前會檢查輸入框，若提示詞遺失會重新填入
+- **加強提示詞輸入框除錯**：列出頁面上所有候選輸入框（含 placeholder/aria-label/class/可見性）與選中元素的 HTML，方便定位是否抓錯輸入框或編輯器框架
+
+## v1.9.81 更新重點
+
+- **修復「創建」按鈕顯示「請輸入提示詞」**：Flow 的提示詞輸入框是 contentEditable 富文字編輯器（ProseMirror 等），其「內部文件狀態」與畫面上的 DOM 文字是分開的。先前直接設 `textContent`／直接呼叫 React handler 只改到畫面、內部 doc 仍是空的，導致按「創建」時 Flow 判定沒有提示詞。現在改為優先使用 `document.execCommand("insertText")`（原生插入，會觸發 beforeinput 讓編輯器更新內部狀態），且不再先清空 DOM；填入後會驗證並記錄編輯器類型與 DOM 狀態
+
 ## v1.9.48 更新重點
 
 - **比例選單對應 UI**：比例白名單擴充為 16:9 / 9:16 / 1:1 / 4:3 / 3:4 / 16:10 / 21:9 等，圖片模式支援 4:3、3:4 等全部比例

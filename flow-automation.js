@@ -49,99 +49,85 @@
     reportDebugLog(args.map(a => (typeof a === "string" ? a : JSON.stringify(a))).join(" "), "error");
   }
 
+  // 透過 React fiber 找 Slate editor 實例（data-slate-editor 的編輯器）
+  function findSlateEditor(el) {
+    try {
+      let node = el;
+      for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+        const fk = Object.keys(node).find(k => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+        if (!fk) continue;
+        let fiber = node[fk];
+        for (let i = 0; fiber && i < 60; i++) {
+          const props = fiber.memoizedProps || fiber.pendingProps || {};
+          const cand = props.editor || (fiber.memoizedState && fiber.memoizedState.memoizedState);
+          if (cand && typeof cand.insertText === "function" && typeof cand.onChange === "function") {
+            return cand;
+          }
+          fiber = fiber.return;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
   // Utility: set native input value
   function setNativeValue(el, value) {
     if (el && el.isContentEditable) {
       el.focus();
+      // 記錄編輯器資訊（判斷是哪種富文字框架，方便除錯）
+      try {
+        const cls = (el.className || "") + " " + ((el.parentElement && el.parentElement.className) || "");
+        const isPM = /prosemirror/i.test(cls) || !!el.querySelector(".ProseMirror");
+        const isLex = /lexical/i.test(cls) || el.hasAttribute("data-lexical-editor");
+        const isSlate = el.hasAttribute("data-slate-editor") || (el.outerHTML || "").includes("data-slate-editor");
+        log("[Prompt] editor type:", isSlate ? "Slate" : isPM ? "ProseMirror" : isLex ? "Lexical" : "unknown", "| class:", cls.slice(0, 80));
+      } catch (e) { /* ignore */ }
 
-      // 列出所有 React 相關屬性
-      const reactKeys = Object.keys(el).filter(k => k.startsWith("__react"));
-      log("[Prompt] React keys on element:", reactKeys.join(", ") || "none");
-
-      // 方法 1：找 React __reactProps 上的 onPaste / onChange / onInput
-      const propsKey = reactKeys.find(k => k.startsWith("__reactProps$"));
-      if (propsKey && el[propsKey]) {
-        const props = el[propsKey];
-        log("[Prompt] React props handlers:", Object.keys(props).filter(k => typeof props[k] === "function").join(", "));
-
-        // 嘗試 onPaste
-        if (typeof props.onPaste === "function") {
-          log("[Prompt] calling React onPaste directly");
-          const fakeClipData = {
-            getData: function(type) { return value; },
-            types: ["text/plain"],
-            files: [],
-            items: [{ type: "text/plain", getAsString: function(cb) { cb(value); } }]
-          };
-          props.onPaste({
-            target: el, currentTarget: el,
-            clipboardData: fakeClipData,
-            preventDefault: function(){}, stopPropagation: function(){},
-            nativeEvent: { clipboardData: fakeClipData }
-          });
-          log("[Prompt] called onPaste, length:", value.length);
+      // 方法 A（Slate 專用）：透過 React fiber 找到 Slate editor，設定 selection 後用 editor.insertText
+      const slateEditor = findSlateEditor(el);
+      if (slateEditor) {
+        try {
+          // 空編輯器通常是 [{children:[{text:""}]}]，path [0,0] 是第一個文字節點
+          slateEditor.selection = { anchor: { path: [0, 0], offset: 0 }, focus: { path: [0, 0], offset: 0 } };
+          slateEditor.insertText(value);
+          log("[Prompt] filled via Slate editor.insertText, length:", value.length);
           return;
-        }
-
-        // 嘗試 onChange
-        if (typeof props.onChange === "function") {
-          log("[Prompt] calling React onChange directly");
-          el.textContent = value;
-          props.onChange({
-            target: el, currentTarget: el,
-            preventDefault: function(){}, stopPropagation: function(){},
-            nativeEvent: new InputEvent("input", { inputType: "insertText", data: value })
-          });
-          log("[Prompt] called onChange, length:", value.length);
-          return;
+        } catch (e) {
+          log("[Prompt] Slate insertText failed:", e.message);
         }
       }
 
-      // 方法 2：找 React fiber 上的 onChange / onPaste（向上遍歷）
-      const fiberKey = reactKeys.find(k => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
-      if (fiberKey && el[fiberKey]) {
-        let fiber = el[fiberKey];
-        let depth = 0;
-        while (fiber && depth < 30) {
-          const props = fiber.memoizedProps || fiber.pendingProps || {};
-          const handlers = Object.keys(props).filter(k => typeof props[k] === "function" && (k.startsWith("on") || k === "onChange"));
-          if (handlers.length > 0) {
-            log("[Prompt] fiber depth=" + depth + " handlers:", handlers.join(", "));
-          }
-          if (typeof props.onPaste === "function") {
-            log("[Prompt] found fiber onPaste at depth", depth);
-            const fakeClipData = {
-              getData: function(type) { return value; },
-              types: ["text/plain"], files: []
-            };
-            props.onPaste({
-              target: el, currentTarget: el,
-              clipboardData: fakeClipData,
-              preventDefault: function(){}, stopPropagation: function(){}
-            });
-            return;
-          }
-          if (typeof props.onChange === "function" && depth < 5) {
-            log("[Prompt] found fiber onChange at depth", depth);
-            el.textContent = value;
-            props.onChange({ target: el, currentTarget: el, preventDefault: function(){}, stopPropagation: function(){} });
-            return;
-          }
-          fiber = fiber.return;
-          depth++;
-        }
-      }
-
-      // 方法 3：最後備用 — execCommand with Range
-      el.textContent = "";
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand("insertText", false, value);
+      // 方法 B：設定 DOM 游標到第一個 block 的開頭，再 dispatch beforeinput
+      //（Slate/ProseMirror 的 onBeforeInput 處理 insertText 並更新內部狀態）
+      try {
+        const block = el.querySelector("p, div, [data-slate-node='element']") || el;
+        const range = document.createRange();
+        range.selectNodeContents(block);
+        range.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (e) { /* ignore */ }
+      try {
+        el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: value }));
+      } catch (e) { /* ignore */ }
       el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
-      log("[Prompt] set via execCommand with Range, length:", value.length);
+
+      // 方法 C：execCommand 補 DOM（若框架沒處理 beforeinput，至少視覺上要有文字）
+      const cur = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (!cur.includes(value.replace(/\s+/g, " ").slice(0, 10))) {
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(el.querySelector("p, div, [data-slate-node='element']") || el);
+          range.collapse(true);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          document.execCommand("insertText", false, value);
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+        } catch (e) { /* ignore */ }
+      }
+      log("[Prompt] filled (beforeinput/execCommand), length:", value.length);
       return;
     }
     // textarea / input
@@ -152,6 +138,17 @@
     setter.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // 填字後驗證：記錄 DOM 是否真的有文字、以及偵測到的富文字框架
+  function verifyPromptFill(el, expected) {
+    try {
+      const domText = (el.textContent || "").replace(/\s+/g, " ").trim();
+      const exp = (expected || "").replace(/\s+/g, " ").trim();
+      const domOk = domText.length > 0 && (domText.includes(exp.slice(0, 30)) || exp.includes(domText.slice(0, 30)));
+      log("[Prompt] verify: domText len=" + domText.length, "domMatch=" + domOk);
+      return domOk;
+    } catch (e) { return false; }
   }
 
   // Click helpers
@@ -198,6 +195,14 @@
       (el.getAttribute("aria-label") || "") + " " +
       (el.getAttribute("data-testid") || "") + " " +
       (el.getAttribute("title") || "");
+    // 除錯：列出所有候選輸入框（判斷是否抓錯元素）
+    try {
+      const cand = all.map(el => {
+        const r = el.getBoundingClientRect();
+        return el.tagName + "(ce=" + el.isContentEditable + ",ph=" + JSON.stringify((el.getAttribute("placeholder") || "").slice(0, 20)) + ",al=" + JSON.stringify((el.getAttribute("aria-label") || "").slice(0, 20)) + ",cls=" + JSON.stringify((el.className || "").toString().slice(0, 40)) + ",vis=" + (r.width > 0 && r.height > 0) + ")";
+      });
+      log("[Prompt] candidates:", cand.join(" | "));
+    } catch (e) { /* ignore */ }
     const byKeyword = visible.filter(el => /prompt|提示|描述|Describe|Prompt|prompt/i.test(attrs(el)));
     if (byKeyword.length > 0) return byKeyword[0];
     const ce = visible.find(el => el.isContentEditable);
@@ -209,116 +214,51 @@
   }
 
   function findSubmitButton() {
-    const isVisibleBtn = b => {
-      const r = b.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return false;
-      if (b.disabled || b.getAttribute("aria-disabled") === "true") return false;
-      return true;
-    };
     const describe = b => (b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
-    const viewH = window.innerHeight || document.documentElement.clientHeight;
-    const viewW = window.innerWidth || document.documentElement.clientWidth;
-
-    // 用 queryAllVisible（含 Shadow DOM）搜尋所有按鈕
-    const allSubmitBtns = queryAllVisible(document);
-    // 策略 1（最精確）：找模型選擇器按鈕右邊的小按鈕（送出按鈕）
-    const modelBtn = allSubmitBtns
-      .filter(isVisibleBtn)
-      .find(b => {
-        const r = b.getBoundingClientRect();
-        if (r.top < viewH * 0.6) return false;
-        const t = (b.textContent || "").toLowerCase();
-        return /720|1080|4k|视频|video|nano|banana|veo|omni|crop/.test(t) && r.width > 80;
-      });
-    if (modelBtn) {
-      const mr = modelBtn.getBoundingClientRect();
-      const rightBtn = allSubmitBtns
-        .filter(isVisibleBtn)
-        .find(b => {
-          const r = b.getBoundingClientRect();
-          if (r.left <= mr.right) return false;
-          if (Math.abs(r.top - mr.top) > 20) return false;
-          if (r.width > 60 || r.height > 60) return false;
-          return true;
-        });
-      if (rightBtn) {
-        log("Submit button (right of model):", describe(rightBtn), "pos=" + Math.round(rightBtn.getBoundingClientRect().left) + "," + Math.round(rightBtn.getBoundingClientRect().top));
-        return rightBtn;
-      }
-    }
-
-    // 策略 2：底部工具列中，小按鈕（x > 60%）且含「创建」
-    const createBtns = allSubmitBtns.filter(isVisibleBtn).filter(b => {
+    const pos = b => { const r = b.getBoundingClientRect(); return Math.round(r.left) + "," + Math.round(r.top); };
+    // 收集所有可見 <button>（含停用——送出鍵可能因提示詞未被辨識而停用，需記錄）
+    const btns = Array.from(document.querySelectorAll("button")).filter(b => {
       const r = b.getBoundingClientRect();
-      if (r.top < viewH * 0.7) return false;
-      if (r.width > 80 || r.height > 60) return false;
-      if (r.left < viewW * 0.6) return false; // 右側 60%
-      const t = (b.textContent || "").replace(/\s+/g, " ").trim();
-      if (/^x[1-4]$|^取消|^cancel|^close|^清除|^arrow_back|^arrow_drop|^智能体/.test(t)) return false;
-      if (/crop_|nano|banana|veo|omni|720|1080|4k/i.test(t)) return false;
-      return /创建|create/.test(t);
+      return r.width > 0 && r.height > 0;
     });
-    if (createBtns.length > 0) {
-      const btn = createBtns.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
-      log("Submit button (create btn):", describe(btn));
+    const createRe = /创建|創建|create|生成|產生|送出|提交|執行|submit/i;
+    const excludeRe = /取消|cancel|close|關閉|清除|更多|more_vert|搜索|search|排序|filter|添加媒体|返回|收起/i;
+    const candidates = btns.filter(b => {
+      const t = (b.textContent || "").replace(/\s+/g, " ").trim();
+      if (!t) return false;
+      if (excludeRe.test(t)) return false;
+      return createRe.test(t);
+    });
+    // 診斷：列出所有候選按鈕（含停用狀態與位置）
+    try {
+      log("[Submit] candidate buttons:", candidates.map(b => "'" + describe(b) + "' d=" + (b.disabled || b.getAttribute("aria-disabled") === "true") + " pos=" + pos(b)).join(" | "));
+    } catch (e) { /* ignore */ }
+    // 優先：含 arrow_forward 的主送出鍵（Flow 的 arrow_forward创建）
+    const submit = candidates.find(b => /arrow_forward/i.test(b.textContent || ""));
+    if (submit) {
+      const dis = submit.disabled || submit.getAttribute("aria-disabled") === "true";
+      log("Submit button:", describe(submit), dis ? "(DISABLED—提示詞可能未被 Flow 辨識)" : "");
+      return submit;
+    }
+    // 其次：取最右邊的「創建」按鈕（排除 add_2 加號鍵）
+    const noAdd = candidates.filter(b => !/add_2|^add\b|^add$/.test((b.textContent || "").replace(/\s+/g, " ").trim()));
+    if (noAdd.length > 0) {
+      const btn = noAdd.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
+      log("Submit button (rightmost create):", describe(btn));
       return btn;
     }
-
-    // 策略 3：位置 fallback — 找底部工具列中含「创建」的小按鈕
-    const bottomRightBtns = allSubmitBtns.filter(isVisibleBtn).filter(b => {
-      const r = b.getBoundingClientRect();
-      if (r.top < viewH * 0.7) return false;
-      if (r.left < viewW * 0.6) return false;
-      if (r.width > 100 || r.height > 60) return false;
-      const t = (b.textContent || "").replace(/\s+/g, " ").trim();
-      // 必須有文字（排除空文字的擴充功能按鈕）
-      if (!t || t.length === 0) return false;
-      // 排除面板控制項
-      if (/^x[1-4]$|^取消|^cancel|^close|^清除|^arrow_back|^arrow_drop|^智能体|^更多|^more_vert/.test(t)) return false;
-      if (/crop_|nano|banana|veo|omni|720|1080|4k|arrow_drop/.test(t)) return false;
-      if (t.length > 20) return false;
-      return true;
-    });
-    if (bottomRightBtns.length > 0) {
-      // 優先找含「创建」的按鈕
-      const createBtn = bottomRightBtns.find(b => /创建|create/.test(b.textContent || ""));
-      if (createBtn) {
-        const br = createBtn.getBoundingClientRect();
-        log("Submit button (create fallback):", describe(createBtn), "pos=" + Math.round(br.left) + "," + Math.round(br.top));
-        return createBtn;
-      }
-      // 取最右邊的按鈕
-      const btn = bottomRightBtns.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
-      const br = btn.getBoundingClientRect();
-      log("Submit button (position fallback):", describe(btn), "pos=" + Math.round(br.left) + "," + Math.round(br.top), "sz=" + Math.round(br.width) + "x" + Math.round(br.height));
+    // 最後：候選中最右邊的
+    if (candidates.length > 0) {
+      const btn = candidates.sort((a, b) => b.getBoundingClientRect().left - a.getBoundingClientRect().left)[0];
+      log("Submit button (fallback):", describe(btn));
       return btn;
     }
-
-    // 最終 fallback：找模型選擇器按鈕右邊的空間位置，用座標點擊
-    const allEls = queryAllVisible(document);
-    const modelBtnFinal = allEls.find(el => {
-      const r = el.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return false;
-      if (r.top < viewH * 0.6) return false;
-      if (r.height > 60 || r.height < 15) return false;
-      const t = (el.textContent || "").toLowerCase();
-      return /720|1080|4k|视频|video|nano|banana|veo|omni/.test(t) && r.width > 80;
-    });
-    if (modelBtnFinal) {
-      const mr = modelBtnFinal.getBoundingClientRect();
-      // 送出按鈕在模型選擇器右邊，同一行
-      const clickX = Math.round(mr.right + 30);
-      const clickY = Math.round(mr.top + mr.height / 2);
-      log("Submit button (coordinate fallback): clicking at", clickX + "," + clickY, "(right of model selector at", Math.round(mr.left) + "," + Math.round(mr.top) + ")");
-      // 用座標觸發點擊
-      const target = document.elementFromPoint(clickX, clickY);
-      if (target) {
-        log("Submit coordinate target:", target.tagName, "text=" + (target.textContent || "").trim().slice(0, 30));
-        click(target);
-        return target;
-      }
+    // 極端 fallback：最後一個可見 button
+    if (btns.length > 0) {
+      const last = btns[btns.length - 1];
+      log("Submit button (last fallback):", describe(last));
+      return last;
     }
-
     log("Submit button: NOT FOUND");
     return null;
   }
@@ -1607,6 +1547,7 @@
     await sleep(200);
     setNativeValue(textarea, cleanPromptText(item.text));
     await sleep(500);
+    verifyPromptFill(textarea, item.text);
 
     // Auto character / voice
     tryAutoCharacter(item.text);
@@ -1706,6 +1647,20 @@
     await tryAddMatchedAssets(item.text);
     // Submit（等待面板動畫完成和 DOM 穩定）
     await sleep(1200);
+    // 送出前重新確認提示詞仍在——中間的面板/頁籤/picker 操作可能把輸入框清掉或重渲染
+    const promptEl = findPromptTextarea();
+    if (promptEl) {
+      const cur = (promptEl.textContent || "").replace(/\s+/g, " ").trim();
+      const want = cleanPromptText(item.text).replace(/\s+/g, " ").trim();
+      if (cur.length === 0 || (want.length > 0 && !cur.includes(want.slice(0, 30)))) {
+        log("[Submit] prompt empty/lost before submit, re-filling...");
+        setNativeValue(promptEl, cleanPromptText(item.text));
+        await sleep(600);
+        verifyPromptFill(promptEl, item.text);
+      } else {
+        log("[Submit] prompt present before submit, len=" + cur.length);
+      }
+    }
     let submit = findSubmitButton();
     if (!submit) {
       log("[Submit] First attempt failed, retrying in 1s...");
