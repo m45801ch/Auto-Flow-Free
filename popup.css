@@ -888,6 +888,22 @@ textarea#prompts {
   transition: background .15s ease;
 }
 .notflow-btn:hover { background: var(--accent-hover); }
+.notflow-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.notflow-actions .notflow-btn { margin-top: 0; }
+.notflow-btn.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--card-border);
+  cursor: pointer;
+  font-family: inherit;
+}
+.notflow-btn.secondary:hover { background: var(--warn-bg); }
 
 /* Character multi-select list (v1.9.8) */
 select.disabled {
@@ -945,13 +961,47 @@ select[multiple] option {
   object-fit: cover;
   margin-left: auto;
   border: 1px solid var(--card-border);
+  cursor: zoom-in;
+}
+.auto-match-thumb { cursor: zoom-in; }
+
+/* Thumbnail lightbox */
+.imglight-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.imglight-img {
+  max-width: 92%;
+  max-height: 88%;
+  border-radius: 10px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+.imglight-close {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
 }
 
-/* Block all interaction with the app while the forced modal is visible */
+/* Reminder mode: modal is dismissible, never blocks the app behind it.
+   (Legacy body.notflow-locked styles intentionally left empty.) */
 body.notflow-locked .topbar,
 body.notflow-locked .panel,
 body.notflow-locked .warn-card,
 body.notflow-locked main {
-  pointer-events: none !important;
-  opacity: 0.45;
+  pointer-events: auto;
+  opacity: 1;
 }

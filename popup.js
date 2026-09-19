@@ -4,7 +4,10 @@
 // ============================================================
 
 const STORAGE_KEY = "flowAutomationSettings";
-const FLOW_URL = "https://labs.google/fx/tools/flow";
+const FLOW_URL = "https://flow.google.com/";
+// Flow 雙網址：labs.google 舊版 + flow.google.com 新版（2025 後預設網址）
+const FLOW_RE = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow|flow\.google\.com/i;
+const FLOW_TAB_URLS = ["*://labs.google/fx/*tools/flow*", "*://flow.google.com/*"];
 
 // ---------------- i18n ----------------
 const i18n = {
@@ -26,6 +29,11 @@ const i18n = {
     hintPrompts: "用空行分隔每個 prompt。",
     toggleCharacter: "自動新增角色 (Google Flow 功能)",
     hintCharacter: "當提示詞中提及角色時，自動選擇對應角色。",
+    toggleMaterial: "自動新增素材 (Google Flow 素材庫)",
+    hintMaterial: "當提示詞中提及素材時，自動選擇對應素材加入提示詞。",
+    labelMaterialMulti: "掃描到的素材（多選）",
+    hintMaterialScan: "尚未掃描任何素材。掃描時會自動切到 Flow「圖像」分頁，列出已上傳與已生成的圖片供選取。",
+    btnScanMaterials: "掃描素材",
     labelDefaultChar: "預設角色",
     labelCharMulti: "掃描到的角色（多選）",
     hintCharScan: "尚未掃描任何角色。請先在 Google Flow 專案中建立角色，然後點選「掃描角色」，即可列出角色供選取。",
@@ -35,6 +43,8 @@ const i18n = {
     toggleCharImagesUpload: "自動新增上傳的角色圖片",
     hintCharImages: "自動新增與 prompt 中角色名稱相符的圖片（根據檔名）。",
     toggleVoice: "自動套用語音（按說話者自動選語音）",
+    toggleAgent: "智慧體自動生成",
+    hintAgent: "打開後切換為智慧體自動化模式，提示詞輸入改由 Agent 流程處理；關閉後回到原本模式。",
     hintVoice: "啟用後，自動選擇語音並填入 Flow 的語音設定欄位：prompt 提到說話者名稱時自動選擇對應語音，否則使用「預設說話者」（選「無」則未命中的段落不設定語音，由 Flow 依內建行為處理）。角色對話的聲音由 Veo 自動生成（男女聲自動配對），與此設定無關。某段不想套用語音時，可在該段 prompt 加入 [NOVOICE]。",
     labelDefaultVoice: "預設說話者（未命中時使用的語音）",
     voiceDefault: "未設定語音",
@@ -56,6 +66,9 @@ const i18n = {
     hintImageMode: "圖片提示詞的預設輸入選項。最後一個提示詞將使用新圖片。",
     imageModeNew: "新圖片", imageModeLast: "上一張圖片",
     labelVideoRes: "自動下載品質（影片）",
+    labelGenerationRes: "影片生成解析度",
+    generationResDefault: "依 Flow 預設",
+    hintGenerationRes: "選擇生成影片的解析度；與下載品質分開設定。",
     hintVideoRes: "選擇自動下載的影片品質。",
     videoRes720p: "720p", videoRes1080p: "1080p（需 Ultra/Pro 方案）", videoRes4k: "4K（需 Ultra/Pro 方案）",
     labelImageRes: "自動下載品質（圖片）",
@@ -71,6 +84,7 @@ const i18n = {
     notFlowHint: "Flow 自動化工具僅在 Flow 專案頁面上可用。",
     notFlowTabNote: "任務執行中請保持 Flow 分頁開啟（不可關閉）。切換到其他分頁時任務仍會繼續，但處理速度會變慢；關閉 Flow 分頁或讓電腦休眠會中斷任務。",
     goToFlow: "前往 Flow",
+    notFlowOk: "確定",
     openInTab: "在新分頁開啟",
     tabDebug: "調試日誌報告",
     labelDownloadSettings: "下載設定",
@@ -168,6 +182,8 @@ const i18n = {
     scanAutoMatchedCount: "已自動匹配 %N% 個角色，下方列出各段提示詞命中的角色：",
     toastNotFlowAutoChar: "目前不在 Flow 頁面，自動新增角色無法掃描，已切換回手動模式。請在 Flow 頁面開啟。",
     scanFound: "已掃描到 %N% 個角色，已顯示在上方清單供選取。提示詞提到角色名稱時也會依檔名自動匹配圖片。",
+    scanMaterialNone: "未找到素材。請先在 Google Flow 素材庫中準備素材後重新掃描。",
+    scanMaterialFound: "已掃描到 %N% 個素材，已顯示在上方清單供選取。提示詞提到素材名稱時會自動加入提示詞。",
     toastAlreadyRunning: "正在執行中",
     toastPreviewCleared: "預覽與斷點已清除",
 
@@ -210,6 +226,11 @@ const i18n = {
     hintPrompts: "Separate each prompt with blank lines.",
     toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "Automatically select the character when it is mentioned in a prompt.",
+    toggleMaterial: "Auto-add materials (Google Flow library)",
+    hintMaterial: "Automatically select matching materials and add them to the prompt when mentioned.",
+    labelMaterialMulti: "Scanned materials (multi-select)",
+    hintMaterialScan: "No materials scanned yet. Scanning auto-switches to the Flow Images tab and lists uploaded and generated images.",
+    btnScanMaterials: "Scan materials",
     labelDefaultChar: "Default character",
     labelCharMulti: "Scanned characters (multi-select)",
     hintCharScan: "No characters scanned yet. Create characters in your Flow project first, then click \"Scan characters\" to list them for selection.",
@@ -219,6 +240,8 @@ const i18n = {
     toggleCharImagesUpload: "Auto-add uploaded character images",
     hintCharImages: "Auto-add images whose file names match character names mentioned in the prompt.",
     toggleVoice: "Auto-apply voice (auto-select voice by speaker)",
+    toggleAgent: "Agent auto-generate",
+    hintAgent: "When on, switches to Agent Automation mode so prompts go through the agent flow; turning it off restores the previous mode.",
     hintVoice: "When enabled, the extension automatically selects a voice and fills in Flow's voice setting field: if a prompt mentions a speaker name, that voice is used; otherwise the 'Default speaker' is used (select 'None' to leave unmatched segments unset, letting Flow follow its default behavior). Character dialogue is voiced automatically by Veo (male/female matched by character) and is not affected by this setting. To skip voice assignment for a segment, add [NOVOICE] to that prompt.",
     labelDefaultVoice: "Default speaker (used when no name is matched)",
     voiceDefault: "No voice configured",
@@ -240,6 +263,9 @@ const i18n = {
     hintImageMode: "Default input option for image prompts. The last prompt will always use a new image.",
     imageModeNew: "New image", imageModeLast: "Previous image",
     labelVideoRes: "Auto-download quality (video)",
+    labelGenerationRes: "Video generation resolution",
+    generationResDefault: "Flow default",
+    hintGenerationRes: "Set the video generation resolution separately from download quality.",
     hintVideoRes: "Choose the auto-download video quality.",
     videoRes720p: "720p", videoRes1080p: "1080p (Ultra/Pro plan required)", videoRes4k: "4K (Ultra/Pro plan required)",
     labelImageRes: "Auto-download quality (image)",
@@ -255,6 +281,7 @@ const i18n = {
     notFlowHint: "Flow Automation is only available on Flow project pages.",
     notFlowTabNote: "While a task is running, keep the Flow tab open (do not close it). Tasks continue when you switch to another tab but run slower; closing the Flow tab or letting the computer sleep will interrupt the task.",
     goToFlow: "Go to Flow",
+    notFlowOk: "OK",
     openInTab: "Open in a new tab",
     tabDebug: "Debug log report",
     labelDownloadSettings: "Download settings",
@@ -355,6 +382,8 @@ const i18n = {
     stopped: "Batch processing stopped.",
     scanNone: "No characters found. Open your Flow project, create characters, then scan again; names mentioned in prompts are also auto-matched by file name.",
     scanFound: "Scanned %N% characters, listed above for selection. Names mentioned in prompts are also auto-matched by file name.",
+    scanMaterialNone: "No materials found. Prepare materials in your Flow library, then scan again.",
+    scanMaterialFound: "Scanned %N% materials, listed above for selection. Names mentioned in prompts are added to the prompt automatically.",
     scanAutoMatched: "Auto-matched (characters mentioned in prompts are selected automatically; no scan needed).",
     scanAutoMatchedCount: "Auto-matched %N% characters; matched characters per prompt segment are listed below:",
     toastNotFlowAutoChar: "Not on a Flow page; auto-add characters cannot scan and was switched to manual mode. Please turn it on in the Flow page.",
@@ -399,6 +428,11 @@ const i18n = {
     hintPrompts: "用空行分隔每个 prompt。",
     toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "当提示词中提及角色时，自动选择对应角色。",
+    toggleMaterial: "自动新增素材 (Google Flow 素材库)",
+    hintMaterial: "当提示词中提及素材时，自动选择对应素材加入提示词。",
+    labelMaterialMulti: "扫描到的素材（多选）",
+    hintMaterialScan: "尚未扫描任何素材。扫描时会自动切到 Flow「图像」分页，列出已上传与已生成的图片供选取。",
+    btnScanMaterials: "扫描素材",
     labelDefaultChar: "默认角色",
     labelCharMulti: "扫描到的角色（多选）",
     hintCharScan: "尚未扫描任何角色。请先在 Google Flow 项目中创建角色，然后点击「扫描角色」，即可列出角色供选取。",
@@ -408,6 +442,8 @@ const i18n = {
     toggleCharImagesUpload: "自动添加上传的角色图片",
     hintCharImages: "自动添加与 prompt 中角色名称匹配的图片（基于文件名）。",
     toggleVoice: "自动应用语音（按说话者自动选语音）",
+    toggleAgent: "智能体自动生成",
+    hintAgent: "打开后切换为智能体自动化模式，提示词输入改由 Agent 流程处理；关闭后回到原本模式。",
     hintVoice: "启用后，自动选择语音并填入 Flow 的语音设置栏位：prompt 提到说话者名称时自动选择对应语音，否则使用「默认说话者」（选「无」则未命中的段落不设置语音，由 Flow 依内置行为处理）。角色对话的声音由 Veo 自动生成（男女声自动配对），与此设置无关。某段不想套用语音时，可在该段 prompt 加入 [NOVOICE]。",
     labelDefaultVoice: "默认说话者（未命中时使用的语音）",
     voiceDefault: "未配置语音",
@@ -429,6 +465,9 @@ const i18n = {
     hintImageMode: "图片提示词的默认输入选项。最后一个提示词将始终使用新图片。",
     imageModeNew: "新图片", imageModeLast: "上一张图片",
     labelVideoRes: "自动下载质量（视频）",
+    labelGenerationRes: "视频生成分辨率",
+    generationResDefault: "使用 Flow 默认值",
+    hintGenerationRes: "视频生成分辨率与下载质量分别设置。",
     hintVideoRes: "选择自动下载的视频质量。",
     videoRes720p: "720p", videoRes1080p: "1080p（需要 Ultra/Pro 方案）", videoRes4k: "4K（需要 Ultra/Pro 方案）",
     labelImageRes: "自动下载质量（图片）",
@@ -444,6 +483,7 @@ const i18n = {
     notFlowHint: "Flow 自动化工具仅在 Flow 项目页面上可用。",
     notFlowTabNote: "任务执行中请保持 Flow 分页开启（不可关闭）。切换到其他分页时任务仍会继续，但处理速度会变慢；关闭 Flow 分页或让电脑休眠会中断任务。",
     goToFlow: "前往 Flow",
+    notFlowOk: "确定",
     openInTab: "在新标签页打开",
     tabDebug: "调试日志报告",
     labelDownloadSettings: "下载设置",
@@ -544,6 +584,8 @@ const i18n = {
     stopped: "已停止批量处理。",
     scanNone: "未找到角色。请先在 Google Flow 项目中打开并创建角色后重新扫描；提示词中提到的角色名称会依文件名自动匹配图片。",
     scanFound: "已扫描到 %N% 个角色，已显示在上方清单供选取。提示词中提到的角色名称也会依文件名自动匹配图片。",
+    scanMaterialNone: "未找到素材。请先在 Google Flow 素材库中准备素材后重新扫描。",
+    scanMaterialFound: "已扫描到 %N% 个素材，已显示在上方清单供选取。提示词提到素材名称时会自动加入提示词。",
     scanAutoMatched: "已自动匹配（提示词中提到的角色将自动选择对应图片，无须扫描）。",
     scanAutoMatchedCount: "已自动匹配 %N% 个角色，下方列出各段提示词命中的角色：",
     toastNotFlowAutoChar: "目前不在 Flow 页面，自动新增角色无法扫描，已切换回手动模式。请在 Flow 页面开启。",
@@ -878,7 +920,7 @@ async function exportProject() {
     // 1. Settings & prompts manifest
     const manifest = {
       tool: "Auto Flow Free",
-      version: "1.9.1",
+      version: chrome.runtime.getManifest().version,
       exportedAt: new Date().toISOString(),
       mode: settings.mode,
       chainEnabled: settings.chainEnabled,
@@ -1009,6 +1051,9 @@ function loadSettings() {
     charEnabled: false,
     charSelected: [],
     defaultChar: "",
+    materialEnabled: false,
+    materialSelected: [],
+    materialMap: {},
     maxImages: 2,
     charImageEnabled: false,
     voiceEnabled: false,
@@ -1020,8 +1065,10 @@ function loadSettings() {
     model: "veo3.1-fast",
     imageModel: "nano-banana-2",
     defaultMode: "text2video",
+    agentPrevMode: "text2video",
     imageMode: "new",
     videoRes: "1080p",
+    generationRes: "",
     imageRes: "2k",
     downloadRes: "1080p",
     duration: "8",
@@ -1031,6 +1078,7 @@ function loadSettings() {
     promptDurations: {},
     charMap: {},
     charNames: [],
+    materialNames: [],
   };
   return Object.assign({}, def, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
 }
@@ -1207,6 +1255,8 @@ function bindUI() {
       settings.mode = btn.dataset.mode;
       loadModePrompts();
       saveSettings();
+      const atSync = document.getElementById("agentToggle");
+      if (atSync) atSync.checked = settings.mode === "agent";
       updateModeUI();
     });
   });
@@ -1292,6 +1342,30 @@ function bindUI() {
   });
   document.getElementById("scanChars").addEventListener("click", scanCharacters);
   updateCharScanState();
+
+  // Material toggle & scan (mirrors character flow)
+  const materialToggle = document.getElementById("materialToggle");
+  if (materialToggle) {
+    materialToggle.checked = settings.materialEnabled;
+    materialToggle.addEventListener("change", () => {
+      settings.materialEnabled = materialToggle.checked;
+      saveSettings();
+      updateMaterialScanState();
+      if (settings.materialEnabled) scanMaterials();
+    });
+  }
+  const scanMatBtn = document.getElementById("scanMaterials");
+  if (scanMatBtn) scanMatBtn.addEventListener("click", scanMaterials);
+  const materialSel = document.getElementById("materialSelect");
+  if (materialSel) materialSel.addEventListener("change", onMaterialSelectMultiChange);
+  updateMaterialScanState();
+
+  // Agent auto-generate toggle (shortcut for agent mode)
+  const agentToggle = document.getElementById("agentToggle");
+  if (agentToggle) {
+    agentToggle.checked = settings.mode === "agent";
+    agentToggle.addEventListener("change", () => setAgentMode(agentToggle.checked));
+  }
 
   // Character multi-select: card checkboxes ⟷ dropdown (bidirectional sync)
   document.getElementById("charSelect").addEventListener("change", onCharSelectMultiChange);
@@ -1382,6 +1456,8 @@ function bindUI() {
   if (imgModeSel) { imgModeSel.value = settings.imageMode; imgModeSel.addEventListener("change", e => { settings.imageMode = e.target.value; saveSettings(); }); }
   const vidResSel = document.getElementById("videoResSelect");
   if (vidResSel) { vidResSel.value = settings.videoRes; vidResSel.addEventListener("change", e => { settings.videoRes = e.target.value; saveSettings(); }); }
+  const genResSel = document.getElementById("generationResSelect");
+  if (genResSel) { genResSel.value = settings.generationRes || ""; genResSel.addEventListener("change", e => { settings.generationRes = e.target.value; saveSettings(); }); }
   const imgResSel = document.getElementById("imageResSelect");
   if (imgResSel) { imgResSel.value = settings.imageRes; imgResSel.addEventListener("change", e => { settings.imageRes = e.target.value; saveSettings(); }); }
 
@@ -1447,6 +1523,8 @@ function bindUI() {
     set("frameOption", settings.frameOption);
     setChecked("chainToggle", settings.chainEnabled);
     setChecked("charToggle", settings.charEnabled);
+    setChecked("materialToggle", settings.materialEnabled);
+    setChecked("agentToggle", settings.mode === "agent");
     set("maxImages", String(settings.maxImages));
     setChecked("charImageToggle", settings.charImageEnabled);
     setChecked("voiceToggle", settings.voiceEnabled);
@@ -1461,6 +1539,7 @@ function bindUI() {
     set("defaultModeSelect", settings.defaultMode);
     set("imageModeSelect", settings.imageMode);
     set("videoResSelect", settings.videoRes);
+    set("generationResSelect", settings.generationRes || "");
     set("imageResSelect", settings.imageRes);
     applyTheme();
     const themeSel2 = document.getElementById("themeSelect");
@@ -1524,6 +1603,10 @@ function bindUI() {
   updateQueueFromPrompts();
   ensureQueueProgressTicker();
   applyI18n();
+  // 提醒彈窗的「確定」按鈕：關閉提醒並繼續使用
+  try {
+    document.getElementById("btnDismissNotFlow")?.addEventListener("click", dismissNotFlowModal);
+  } catch (e) { /* ignore */ }
   showNotFlowWarning();
 }
 
@@ -1564,7 +1647,26 @@ function updateModeUI() {
     promptsHint.textContent = t("hintPrompts");
   }
   // Mode switch may change voice support → re-render the per-segment panel.
+  // 同步 agent 開關（開關即 agent 模式的快捷鍵）
+  const agentT = document.getElementById("agentToggle");
+  if (agentT) agentT.checked = settings.mode === "agent";
   updatePerPromptDurList();
+}
+
+// Agent toggle 快捷鍵：ON = 切到 agent 模式（記住原模式），OFF = 回到原模式
+function setAgentMode(on) {
+  saveCurrentModePrompts();
+  if (on) {
+    if (settings.mode !== "agent") settings.agentPrevMode = settings.mode;
+    settings.mode = "agent";
+  } else {
+    const prev = settings.agentPrevMode;
+    settings.mode = (prev && prev !== "agent") ? prev : "text2video";
+  }
+  loadModePrompts();
+  saveSettings();
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === settings.mode));
+  updateModeUI();
 }
 
 // ---------------- Frame upload ----------------
@@ -1643,6 +1745,11 @@ function updatePerPromptDurList() {
   const card = document.getElementById("perDurCard");
   const list = document.getElementById("perDurList");
   if (!card || !list) return;
+  // 圖片模式沒有秒數概念：整張「各段秒數設定」卡直接隱藏
+  if (settings.mode === "text2image" || settings.mode === "image2image") {
+    card.classList.add("hidden");
+    return;
+  }
   const prompts = parsePrompts();
   if (prompts.length < 1) {
     card.classList.add("hidden");
@@ -1916,14 +2023,51 @@ function setItemProgress(el, pct) {
 // 列出供使用者選取（預設角色下拉）。
 // ---- Shared injection body for character scanning (used by both
 // scanCharacters and scanFlowCharacters) ----
-function scanFlowCharactersInject() {
+async function scanFlowCharactersInject() {
   const chars = []; // { name, src }
   const seen = new Set();
-  function add(name, src, fromPanel = false) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const norm = s => (s || "").replace(/\s+/g, " ").trim();
+  // Material icon ligature words — never real names (they mash into cardText)
+  const ICON_WORDS = /^(favorite|favorited|more_vert|more_horiz|redo|undo|share|download|star|star_border|thumb_up|close|search|movie|videocam|photo|photo_library|add|add_2|check|expand_more|chevron_right|chevron_left|arrow_back|arrow_forward|filter_list|filter_alt|sort|info|help|settings|delete|edit|content_copy|open_in_new|fullscreen|zoom_in|play_arrow|autorenew|history|folder|collections|apps_spark_2|dashboard|accessibility_new|left_panel_close|apps?|menu|tune|image_2|account_pro)$/i;
+  function add(name, src, fromPanel = false, imgEl = null) {
     const key = String(name || "").trim().toLowerCase();
     if (!key || seen.has(key)) return;
     seen.add(key);
     chars.push({ name: String(name).trim(), src: src || "" });
+    if (imgEl) imgByKey.set(key, imgEl);
+  }
+  const imgByKey = new Map();
+  // 縮圖轉 dataURL：img.src 若是 blob:，側欄（不同來源）載入會破圖；
+  // 掃描當下在頁面內縮成 96px 存，省空間又永久有效
+  async function thumbDataURL(img, src) {
+    try {
+      const w = img.naturalWidth || Math.round(img.getBoundingClientRect().width) || 0;
+      const h = img.naturalHeight || Math.round(img.getBoundingClientRect().height) || 0;
+      if (w > 0 && h > 0) {
+        const S = 96, sc = Math.min(1, S / Math.max(w, h));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * sc));
+        canvas.height = Math.max(1, Math.round(h * sc));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const url = canvas.toDataURL("image/jpeg", 0.72);
+        if (url && url.length > 100) return url;
+      }
+    } catch (e) { /* 試下一招 */ }
+    try {
+      const resp = await fetch(src);
+      const blob = await resp.blob();
+      const bmp = await createImageBitmap(blob);
+      const S = 96, sc = Math.min(1, S / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bmp.width * sc));
+      canvas.height = Math.max(1, Math.round(bmp.height * sc));
+      canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      if (bmp.close) bmp.close();
+      const url = canvas.toDataURL("image/jpeg", 0.72);
+      if (url && url.length > 100) return url;
+    } catch (e) { /* 保留原 src */ }
+    return src;
   }
   function isValidName(n, fromPanel = false) {
     if (!n) return false;
@@ -1935,6 +2079,9 @@ function scanFlowCharactersInject() {
     // (user feedback: 用户头像, 生成概念图, 制作视觉情绪板, Learn about generation costs,
     //  帶我了解你能做什麼 — Flow 對話面板的建議選項，絕非角色)
     if (/用户头像|用户头象|头像|生成概念|制作视觉|情绪板|视觉情绪|learn about generation|concept art|mood board|概念图|情緒板|帶我了解你能做什麼|帶我瞭解你能做什麼|learn what you can do|what you can create|帶我認識|我能做/i.test(s)) return false;
+    // 使用者圖像區塊（非角色）與圖示 ligature 單詞絕非角色名
+    if (/使用者圖像|使用者图像|显示使用者|顯示使用者|user image|我的圖像|我的图像/i.test(s)) return false;
+    if (ICON_WORDS.test(s)) return false;
     // Guard against account avatars & AI suggestion cards
     // (e.g. "account_pro" avatar, "suggest_1") — UI names with these prefixes
     // are never user-created characters, regardless of where they appear.
@@ -1943,6 +2090,10 @@ function scanFlowCharactersInject() {
     // Flow "add new character" buttons carry accessibility labels like
     // "accessibility_newjade_disc" (aria-label prefix) — never user-created roles
     if (/^accessibility_/.test(s) || /accessibility_new/i.test(s)) return false;
+    // 通用圖片代名（圖片 alt 常見值如「角色縮圖」）絕非使用者命名：
+    // 縮圖系含字即擋，其他全字等於才擋
+    if (/縮圖|缩图|thumbnail/i.test(s)) return false;
+    if (/^(圖片|图片|圖像|图像|照片|相片|封面|封面图|cover|image|images|picture|photo|photos|media|img|圖|图)$/i.test(s)) return false;
     // AI assistant / tool panels: cards whose text is dominated by AI action phrases
     if (/(^|\n|\s)(生成|制作|创作|创作图|Learn about|learn about)/i.test(s) && !/^[A-Za-z0-9][A-Za-z0-9_\-]*$/.test(s)) return false;
     // Account avatar / PRO badge / single-word short labels are never user-created
@@ -1959,6 +2110,101 @@ function scanFlowCharactersInject() {
     }
     return true;
   }
+  // ---- Step 0: 切到「角色」分頁（同網址、內容不同；角色卡都在這裡） ----
+  // 分頁可能是 button 或純文字 span：精確比對自身文字才算（避免誤中大容器）
+  const ownText = el => {
+    try {
+      return (el.textContent || "").replace(/\s+/g, " ").trim();
+    } catch (e) { return ""; }
+  };
+  let charTabFound = false;
+  let previousTab = null;
+  try {
+    // 先找可點擊元素，找不到才找純文字 span（由外層容器誤觸無效點擊比點錯好，
+    // 點外層至少會冒泡到分頁處理器；span 精確比對避免誤中大容器）
+    const btnCands = Array.from(document.querySelectorAll(
+      "button, [role='tab'], [role='button'], [role='link'], a, li"
+    )).filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    let charTab = btnCands.find(el => /^(角色|角色们|characters?)$/i.test(ownText(el)));
+    if (!charTab) {
+      const spanCands = Array.from(document.querySelectorAll("span")).filter(el => {
+        const r = el.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) return false;
+        if (el.children && el.children.length > 0) return false; // 只要葉子 span
+        return true;
+      });
+      charTab = spanCands.find(el => /^(角色|角色们|characters?)$/i.test(ownText(el)));
+    }
+    if (charTab) {
+      charTabFound = true;
+      previousTab = btnCands.find(el => el !== charTab && el.parentElement === charTab.parentElement &&
+        (el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-pressed") === "true" ||
+          el.classList.contains("active") || el.classList.contains("selected"))) || null;
+      const isActive = charTab.getAttribute("aria-selected") === "true" ||
+        charTab.getAttribute("aria-pressed") === "true" ||
+        charTab.classList.contains("active") || charTab.classList.contains("selected");
+      if (!isActive) {
+        try { charTab.click(); } catch (e) { /* ignore */ }
+        await sleep(2000); // 等角色分頁內容渲染
+      }
+    }
+  } catch (e) { /* ignore */ }
+  // 卡片定位＋葉子標題取值（Strategy 1 與網格兜底共用）
+  function findCard(img, stopAt) {
+    let card = img.parentElement;
+    let hops = 0;
+    while (card && card !== stopAt && card !== document.body && hops < 10) {
+      const t = (card.tagName || "").toUpperCase();
+      if (t === "FIGURE" || t === "LI") break;
+      if (t === "DIV" && Array.from(card.querySelectorAll("img[src]")).filter(i => i !== img).length === 0) break;
+      card = card.parentElement;
+      hops++;
+    }
+    if (!card || card === stopAt) card = img;
+    return card;
+  }
+  const cleanLeaf = t => norm(t).replace(/^[^A-Za-z0-9\u4e00-\u9fff]+/, "").replace(/[^A-Za-z0-9\u4e00-\u9fff.]+$/, "");
+  function leafName(card, img, fromPanel) {
+    const leafOk = t => {
+      if (!t || t.length < 2 || t.length > 60) return false;
+      if (ICON_WORDS.test(t)) return false;
+      return isValidName(t, fromPanel);
+    };
+    const leaves = [];
+    try {
+      (card === img ? [img] : Array.from(card.querySelectorAll("*"))).forEach(el => {
+        if (el.children && el.children.length === 0) {
+          const t = cleanLeaf(el.textContent);
+          if (leafOk(t) && !leaves.includes(t)) leaves.push(t);
+        }
+      });
+    } catch (e) { /* ignore */ }
+    const withExt = leaves.filter(t => /\.(png|jpe?g|webp|gif)$/i.test(t));
+    if (withExt.length > 0) {
+      return withExt.sort((a, b) => b.length - a.length)[0].replace(/\.(png|jpe?g|webp|gif)$/i, "");
+    }
+    if (leaves.length > 0) {
+      return leaves.sort((a, b) => b.length - a.length)[0];
+    }
+    const alt = (img.getAttribute("alt") || "").trim();
+    if (alt && /^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff. ]{1,59}$/i.test(alt) && isValidName(alt, fromPanel)) {
+      return alt.replace(/\.(png|jpe?g|webp|gif)$/i, "");
+    }
+    return "";
+  }
+  const inMainChrome = (img) => {
+    let node = img;
+    for (let i = 0; node && i < 10; i++, node = node.parentElement) {
+      if (!node || node === document.body) break;
+      const tag = (node.tagName || "").toUpperCase();
+      const role = (node.getAttribute && node.getAttribute("role")) || "";
+      if (tag === "NAV" || tag === "HEADER" || /navigation|banner|complementary|menu|menubar/i.test(role)) return true;
+    }
+    return false;
+  };
   // ---- Locate the user-created character panel(s) ----
   // A character panel: container whose aria-label/title/textContent mentions
   // 角色/character and actually contains image cards. Everything else is ignored.
@@ -1976,47 +2222,302 @@ function scanFlowCharactersInject() {
   panels.forEach(panel => {
     try {
       panel.querySelectorAll("img[src]").forEach(img => {
-        let card = img.parentElement;
-        let hops = 0;
-        while (card && card !== panel && hops < 10) {
-          const t = (card.tagName || "").toUpperCase();
-          if (t === "FIGURE" || t === "LI") break;
-          if (t === "DIV" && Array.from(card.querySelectorAll("img[src]")).filter(i => i !== img).length === 0) break;
-          card = card.parentElement;
-          hops++;
-        }
-        if (!card || card === panel) card = img;
+        const card = findCard(img, panel);
         const cardImgs = card === img ? [img] : Array.from(card.querySelectorAll("img[src]"));
         if (cardImgs.length === 0 || cardImgs[0] !== img) return;
-        const alt = (img.getAttribute("alt") || "").trim();
-        const cardText = (card?.textContent || "").replace(/\s+/g, " ").trim();
-        let name = "";
-        const tokens = cardText.split(/[\s,，、;；|\/]+/).filter(w => w.length > 0);
-        for (const w of tokens) {
-          if (/^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(w) && isValidName(w, true)) { name = w; break; }
-        }
-        if (!name && /^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(alt)) name = alt;
-        if (!name) name = alt || cardText;
-        if (isValidName(name, true)) add(name, img.src);
+        const name = leafName(card, img, true);
+        if (name) add(name, img.src, true, img);
       });
     } catch (e) { /* ignore */ }
   });
+  // Strategy 1b (角色-tab grid fallback): 已切到角色分頁時，直接收集主內容區圖片卡，
+  // 不要求 角色 aria 標記（分頁本身即上下文）；導航 chrome 與垃圾名照樣過濾
+  if (charTabFound) {
+    try {
+      document.querySelectorAll("img[src]").forEach(img => {
+        const r = img.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) return;
+        if (Math.max(r.width, r.height) < 80) return;
+        const src = img.src || "";
+        if (/avatar|profile|emoji|placeholder|logo/i.test(src)) return;
+        if (inMainChrome(img)) return;
+        const card = findCard(img, document.body);
+        const name = leafName(card, img, true);
+        if (name) add(name, img.src, true, img);
+      });
+    } catch (e) { /* ignore */ }
+  }
   // Strategy 2 (page-wide, safety-filtered): filename-like alt text anywhere
   try {
     document.querySelectorAll("img[src]").forEach(img => {
       const alt = (img.getAttribute("alt") || "").trim();
       if (!alt) return;
-      if (/^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(alt) && isValidName(alt, false)) add(alt, img.src);
+      if (/^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff]{1,30}$/i.test(alt) && isValidName(alt, false)) add(alt, img.src, false, img);
     });
   } catch (e) { /* ignore */ }
   // Strategy 4: character selector dialog / picker
   try {
     document.querySelectorAll("dialog img[src], [role='dialog'] img[src], [aria-modal='true'] img[src], [class*='character-picker'] img[src]").forEach(img => {
       const name = (img.closest("div,li")?.textContent || "").replace(/\s+/g, " ").trim();
-      if (isValidName(name)) add(name, img.src);
+      if (isValidName(name)) add(name, img.src, false, img);
     });
   } catch (e) { /* ignore */ }
+  // blob: 縮圖轉 dataURL（側欄跨來源會破圖），只轉 blob:，https 原樣保留
+  for (const c of chars) {
+    if (!/^blob:/i.test(c.src)) continue;
+    const el = imgByKey.get(c.name.trim().toLowerCase());
+    if (el) c.src = await thumbDataURL(el, c.src);
+  }
+  if (previousTab && previousTab.isConnected) {
+    previousTab.click();
+    await sleep(500);
+  }
   return chars;
+}
+// 掃描 Flow「圖像」分頁（同網址、內容不同；上傳＋已生成的圖都在這裡）。
+// 先自動切到圖像分頁再收集圖片；角色面板內的圖跳過（已在角色名單）。
+async function scanFlowMaterialsInject() {
+  const mats = []; // { name, src }
+  const seen = new Set();
+  function add(name, src, imgEl = null) {
+    const key = String(name || "").trim().toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    mats.push({ name: String(name).trim(), src: src || "" });
+    if (imgEl) imgByKey.set(key, imgEl);
+  }
+  const imgByKey = new Map();
+  // 縮圖轉 dataURL：img.src 若是 blob:，側欄（不同來源）載入會破圖；
+  // 掃描當下在頁面內縮成 96px 存，省空間又永久有效
+  async function thumbDataURL(img, src) {
+    try {
+      const w = img.naturalWidth || Math.round(img.getBoundingClientRect().width) || 0;
+      const h = img.naturalHeight || Math.round(img.getBoundingClientRect().height) || 0;
+      if (w > 0 && h > 0) {
+        const S = 96, sc = Math.min(1, S / Math.max(w, h));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * sc));
+        canvas.height = Math.max(1, Math.round(h * sc));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const url = canvas.toDataURL("image/jpeg", 0.72);
+        if (url && url.length > 100) return url;
+      }
+    } catch (e) { /* 試下一招 */ }
+    try {
+      const resp = await fetch(src);
+      const blob = await resp.blob();
+      const bmp = await createImageBitmap(blob);
+      const S = 96, sc = Math.min(1, S / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bmp.width * sc));
+      canvas.height = Math.max(1, Math.round(bmp.height * sc));
+      canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      if (bmp.close) bmp.close();
+      const url = canvas.toDataURL("image/jpeg", 0.72);
+      if (url && url.length > 100) return url;
+    } catch (e) { /* 保留原 src */ }
+    return src;
+  }
+  function isValidName(n) {
+    if (!n) return false;
+    const s = String(n).trim();
+    if (s.length === 0 || s.length > 60) return false;
+    if (/^(新建|添加|新增|create|add|new|upload|delete|remove|close|more|options|edit|share|menu|settings|home|素材|materials?|material list|material library|素材庫|上傳|我的素材)$/i.test(s)) return false;
+    if (/用户头像|用户头象|头像|生成概念|制作视觉|情绪板|视觉情绪|learn about generation|concept art|mood board|概念图|情緒板|帶我了解你能做什麼|帶我瞭解你能做什麼|learn what you can do|what you can create|帶我認識|我能做/i.test(s)) return false;
+    if (/^(account|user|avatar|profile|suggest|ai_|suggestion)/i.test(s)) return false;
+    if (/^accessibility_/.test(s) || /accessibility_new/i.test(s)) return false;
+    // 通用圖片代名絕非使用者命名：縮圖系含字即擋，其他全字等於才擋
+    if (/縮圖|缩图|thumbnail/i.test(s)) return false;
+    if (/^(圖片|图片|圖像|图像|照片|相片|封面|封面图|cover|image|images|picture|photo|photos|media|img|圖|图)$/i.test(s)) return false;
+    // 使用者圖像區塊與圖示 ligature 單詞絕非素材名
+    if (/使用者圖像|使用者图像|显示使用者|顯示使用者|user image|我的圖像|我的图像/i.test(s)) return false;
+    if (ICON_WORDS.test(s)) return false;
+    if (/(^|\n|\s)(生成|制作|创作|创作图|Learn about|learn about)/i.test(s) && !/^[A-Za-z0-9][A-Za-z0-9_\-]*$/.test(s)) return false;
+    const hasCJK = /[\u4e00-\u9fff]/.test(s);
+    if (s.length < (hasCJK ? 2 : 4)) return false;
+    if (/^pro$|^free$|^premium|^admin$|^user$|^guest$|^plus$|^test0?$|^beta$|^demo$|^new$/i.test(s)) return false;
+    return true;
+  }
+  const isCharPanel = (el) => {
+    const al = (el.getAttribute("aria-label") || "") + " " + (el.getAttribute("title") || "") + " " + (el.getAttribute("data-testid") || "");
+    return /角色|character/i.test(al);
+  };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const norm = s => (s || "").replace(/\s+/g, " ").trim();
+  // Material icon ligature words — never real names (they mash into cardText)
+  const ICON_WORDS = /^(favorite|favorited|more_vert|more_horiz|redo|undo|share|download|star|star_border|thumb_up|close|search|movie|videocam|photo|photo_library|add|add_2|check|expand_more|chevron_right|chevron_left|arrow_back|arrow_forward|filter_list|filter_alt|sort|info|help|settings|delete|edit|content_copy|open_in_new|fullscreen|zoom_in|play_arrow|autorenew|history|folder|collections|apps_spark_2|dashboard|accessibility_new|left_panel_close|apps?|menu|tune|image_2|account_pro)$/i;
+  // ---- Step 1: 切到「圖像」分頁（上傳＋已生成的圖都在這裡；同網址、內容不同） ----
+  let imgTab = null;
+  let previousTab = null;
+  try {
+    const tabCands = Array.from(document.querySelectorAll(
+      "button, [role='tab'], [role='button'], [role='link'], a, li, span, div"
+    )).filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.width < 320 && r.height < 80;
+    });
+    const imageLabel = tabCands.find(el => {
+      const t = norm(el.textContent).replace(/^(image|photo_library|collections)\s*/i, "");
+      return /^(圖像|图像|圖片|图片|images?|圖片庫|图片库|媒体库|媒體庫|my media|media library|gallery)$/i.test(t);
+    });
+    imgTab = imageLabel && (imageLabel.closest("button, [role='tab'], [role='button'], [role='link'], a, li") ||
+      (imageLabel.tagName === "DIV" && imageLabel.getBoundingClientRect().width > 100 ? imageLabel : imageLabel.parentElement));
+    if (imgTab) {
+      const siblings = Array.from(imgTab.parentElement?.children || []);
+      previousTab = siblings.find(el => el !== imgTab &&
+        (el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-pressed") === "true" ||
+          el.classList.contains("active") || el.classList.contains("selected"))) || null;
+    }
+  } catch (e) { /* ignore */ }
+  if (imgTab) {
+    const isActive = imgTab.getAttribute("aria-selected") === "true" ||
+      imgTab.getAttribute("aria-pressed") === "true" ||
+      imgTab.classList.contains("active") || imgTab.classList.contains("selected");
+    if (!isActive) {
+      try { imgTab.click(); } catch (e) { /* ignore */ }
+      await sleep(2000); // 等圖像分頁內容渲染
+    }
+  }
+  // ---- Step 2: 收集頁面圖片（圖像分頁已確保顯示） ----
+  // 排除：導航/頂欄 chrome、小圖示、頭像類 URL、角色面板內（已在角色名單）
+  const inChrome = (img) => {
+    let node = img;
+    for (let i = 0; node && i < 10; i++, node = node.parentElement) {
+      if (!node || node === document.body) break;
+      const tag = (node.tagName || "").toUpperCase();
+      const role = (node.getAttribute && node.getAttribute("role")) || "";
+      if (tag === "NAV" || tag === "HEADER" || /navigation|banner|menu|menubar/i.test(role)) return true;
+      if (node !== img && isCharPanel(node)) return true;
+    }
+    return false;
+  };
+  const resolveName = (img) => {
+    const cleanLeaf = t => norm(t).replace(/^[^A-Za-z0-9\u4e00-\u9fff]+/, "").replace(/[^A-Za-z0-9\u4e00-\u9fff.]+$/, "");
+    const leafOk = t => {
+      if (!t || t.length < 2 || t.length > 60) return false;
+      if (ICON_WORDS.test(t)) return false;
+      return isValidName(t);
+    };
+    // 圖片常包在只有 <img> 的 div，檔名在上一層兄弟元素；逐層找單張圖片卡。
+    let card = img.parentElement;
+    for (let hops = 0; card && card !== document.body && hops < 8; card = card.parentElement, hops++) {
+      const largeImages = Array.from(card.querySelectorAll("img[src]")).filter(el => {
+        const r = el.getBoundingClientRect();
+        return Math.max(r.width, r.height) >= 80;
+      });
+      if (largeImages.length > 1) break;
+      const leaves = Array.from(card.querySelectorAll("*"))
+        .filter(el => el.children && el.children.length === 0)
+        .map(el => cleanLeaf(el.textContent))
+        .filter(leafOk);
+      const labels = [card.getAttribute("data-name"), card.getAttribute("title"), card.getAttribute("aria-label")]
+        .map(cleanLeaf).filter(leafOk);
+      const names = [...labels, ...leaves];
+      const filename = names.find(t => /\.(png|jpe?g|webp|gif)$/i.test(t));
+      if (filename) return filename.replace(/\.(png|jpe?g|webp|gif)$/i, "");
+      if (names.length) return names[0];
+    }
+    // img 本身屬性
+    const cand = [img.getAttribute("alt"), img.getAttribute("title"),
+      img.getAttribute("aria-label"), img.getAttribute("data-name"), img.getAttribute("data-title")]
+      .map(s => (s || "").trim()).find(s => s && /^[A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9_\-\u4e00-\u9fff. ]{1,59}$/i.test(s) && isValidName(s));
+    if (cand) return cand.replace(/\.(png|jpe?g|webp|gif)$/i, "");
+    return "";
+  };
+  const galleryElements = new Set();
+  const collectVisible = () => {
+    // Current Flow uses custom grid tiles. The user filename is on the tile's
+    // aria-label even when its thumbnail is not exposed as an <img> element.
+    document.querySelectorAll("flow-grid-tile-container[aria-label], [data-testid*='grid-tile'][aria-label]").forEach(card => {
+      const r = card.getBoundingClientRect();
+      if (!(r.width >= 100 && r.height >= 80) || inChrome(card)) return;
+      const name = norm(card.getAttribute("aria-label")).replace(/\.(png|jpe?g|webp|gif)$/i, "");
+      if (!isValidName(name)) return;
+      const media = card.querySelector("img, video, canvas, picture");
+      const src = media?.currentSrc || media?.src || "";
+      add(name, src, media?.tagName === "IMG" ? media : null);
+      galleryElements.add(card);
+    });
+    document.querySelectorAll("img[src]").forEach(img => {
+      const r = img.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return;
+      if (Math.max(r.width, r.height) < 80) return; // 小圖示/頭像
+      const src = img.src || "";
+      if (/avatar|profile|emoji|placeholder|logo/i.test(src)) return;
+      if (inChrome(img)) return;
+      const name = resolveName(img);
+      if (name) { add(name, img.src, img); galleryElements.add(img); }
+    });
+    // Flow may render gallery thumbnails as CSS backgrounds or canvas. Their
+    // visible filename caption is still the stable identifier for the + picker.
+    document.querySelectorAll("span, figcaption, p, div").forEach(label => {
+      if (label.children?.length || inChrome(label)) return;
+      const r = label.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0) || (r.left || 0) < 200 || r.height > 55) return;
+      const raw = norm(label.textContent).replace(/^(image|photo_library)\s*/i, "");
+      const name = raw.replace(/\.(png|jpe?g|webp|gif)$/i, "");
+      if (!isValidName(name)) return;
+      let card = label.parentElement;
+      for (let i = 0; card && card !== document.body && i < 5; i++, card = card.parentElement) {
+        const cr = card.getBoundingClientRect();
+        if (!(cr.width >= 100 && cr.height >= 100 && cr.width < 650 && cr.height < 650)) continue;
+        const media = card.querySelector("img, canvas, video, picture");
+        const bg = [card, ...Array.from(card.querySelectorAll("*")).slice(0, 12)]
+          .some(el => {
+            try { return getComputedStyle(el).backgroundImage !== "none"; } catch (e) { return false; }
+          });
+        if (!media && !bg) continue;
+        const src = media?.currentSrc || media?.src || "";
+        add(name, src, media?.tagName === "IMG" ? media : null);
+        galleryElements.add(label);
+        break;
+      }
+    });
+  };
+  collectVisible();
+  // 懶載入圖像庫：逐頁捲動並去重，最後還原原本位置。
+  const scrollers = [document.scrollingElement, ...document.querySelectorAll("main, [role='main'], [class*='scroll'], [class*='Scroll']")]
+    .filter(Boolean)
+    .filter(el => el.scrollHeight > el.clientHeight + 50 &&
+      Array.from(galleryElements).some(item => el.contains(item)));
+  const galleryScroller = scrollers.sort((a, b) =>
+    Array.from(galleryElements).filter(item => b.contains(item)).length -
+    Array.from(galleryElements).filter(item => a.contains(item)).length ||
+    a.clientHeight - b.clientHeight)[0];
+  if (galleryScroller) {
+    const originalTop = galleryScroller.scrollTop;
+    for (let i = 0; i < 100; i++) {
+      const before = galleryScroller.scrollTop;
+      galleryScroller.scrollTop = before + Math.max(200, galleryScroller.clientHeight * 0.8);
+      await sleep(250);
+      collectVisible();
+      if (galleryScroller.scrollTop === before) break;
+    }
+    const incomplete = galleryScroller.scrollTop + galleryScroller.clientHeight < galleryScroller.scrollHeight - 2;
+    galleryScroller.scrollTop = originalTop;
+    if (incomplete) {
+      if (previousTab && previousTab.isConnected) previousTab.click();
+      throw new Error("Flow 圖像庫尚有未掃描的圖像，請縮小圖像庫後重試");
+    }
+  }
+  // blob: 縮圖轉 dataURL（側欄跨來源會破圖），只轉 blob:，https 原樣保留
+  for (const c of mats) {
+    if (!/^blob:/i.test(c.src)) continue;
+    const el = imgByKey.get(c.name.trim().toLowerCase());
+    if (el) c.src = await thumbDataURL(el, c.src);
+  }
+  if (previousTab && previousTab.isConnected) {
+    previousTab.click();
+    await sleep(500);
+  }
+  return mats;
+}
+// 角色與圖像掃描都會切換同一個 Flow 頁籤，必須依序執行。
+let flowLibraryScanQueue = Promise.resolve();
+function scheduleFlowLibraryScan(task) {
+  const next = flowLibraryScanQueue.then(task, task);
+  flowLibraryScanQueue = next.then(() => undefined, () => undefined);
+  return next;
 }
 // Silent headless scan used by "自動新增角色": no UI rebuild of the
 // character dropdown, result is stored in settings only.
@@ -2024,10 +2525,10 @@ async function scanFlowCharacters() {
   const tab = await ensureFlowTab();
   if (!tab) return null;
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await scheduleFlowLibraryScan(() => chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       func: scanFlowCharactersInject,
-    });
+    }));
     const chars = (results || []).flatMap(r => r?.result || []);
     const dedup = [];
     const seenGlobal = new Set();
@@ -2046,10 +2547,10 @@ async function scanCharacters() {
   const tab = await ensureFlowTab();
   if (!tab) return;
   try {
-    const results = await chrome.scripting.executeScript({
+    const results = await scheduleFlowLibraryScan(() => chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       func: scanFlowCharactersInject,
-    });
+    }));
     const chars = (results || []).flatMap(r => r?.result || []);
     const dedup = [];
     const seenGlobal = new Set();
@@ -2249,6 +2750,161 @@ async function doAutoCharScan() {
   }
 }
 
+// ---------------- Material scan + multi-select (mirrors character flow) ----------------
+let materialScanPending = null;
+async function scanMaterials(flowTab) {
+  if (materialScanPending) return materialScanPending;
+  materialScanPending = scanMaterialsImpl(flowTab);
+  try { return await materialScanPending; }
+  finally { materialScanPending = null; }
+}
+async function scanMaterialsImpl(flowTab) {
+  const tab = flowTab && flowTab.id ? flowTab : await ensureFlowTab();
+  if (!tab) return null;
+  try {
+    const results = await scheduleFlowLibraryScan(() => chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames: true },
+      func: scanFlowMaterialsInject,
+    }));
+    const mats = (results || []).flatMap(r => r?.result || []);
+    const dedup = [];
+    const seenGlobal = new Set();
+    mats.forEach(c => {
+      const k = String(c.name || "").trim().toLowerCase();
+      if (!k || seenGlobal.has(k)) return;
+      seenGlobal.add(k);
+      dedup.push({ name: String(c.name).trim(), src: c.src || "" });
+    });
+    persistMaterialResult(dedup);
+    const select = document.getElementById("materialSelect");
+    select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option>';
+    dedup.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.name;
+      opt.textContent = c.name;
+      if (c.src) opt.dataset.materialImg = c.src;
+      select.appendChild(opt);
+    });
+    const hint = document.getElementById("materialHint");
+    if (dedup.length === 0) {
+      hint.textContent = t("hintMaterialScan");
+      toast(t("scanMaterialNone"));
+      renderMaterialMultiList([]);
+    } else {
+      hint.textContent = t("scanMaterialFound", dedup.length);
+      toast(t("scanMaterialFound", dedup.length));
+      renderMaterialMultiList(dedup);
+    }
+    return dedup;
+  } catch (err) {
+    toast(t("toastScanFail", err.message));
+    return null;
+  }
+}
+
+function persistMaterialResult(dedup) {
+  settings.materialNames = dedup.map(c => c.name);
+  settings.materialMap = {};
+  dedup.filter(c => c.src).forEach(c => { settings.materialMap[c.name] = c.src; });
+  saveSettings();
+  updateMaterialScanState();
+}
+
+function renderMaterialMultiList(mats) {
+  const card = document.getElementById("materialMultiCard");
+  const list = document.getElementById("materialMultiList");
+  if (!list) return;
+  if (!settings.materialSelected || !Array.isArray(settings.materialSelected)) settings.materialSelected = [];
+  if (!mats || mats.length === 0) {
+    if (card) card.classList.add("hidden");
+    return;
+  }
+  if (card) card.classList.remove("hidden");
+  list.innerHTML = "";
+  mats.forEach(c => {
+    const checked = settings.materialSelected.includes(c.name);
+    const item = document.createElement("label");
+    item.className = "char-multi-item";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.className = "char-multi-cb";
+    cb.value = c.name;
+    cb.checked = checked;
+    cb.disabled = !!settings.materialEnabled;
+    cb.addEventListener("change", () => {
+      const names = Array.from(list.querySelectorAll("input[type='checkbox']")).filter(i => i.checked).map(i => i.value);
+      settings.materialSelected = names;
+      saveSettings();
+      syncMaterialSelectFromMulti(names);
+    });
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = c.name;
+    item.appendChild(cb);
+    item.appendChild(nameSpan);
+    if (c.src) {
+      const img = document.createElement("img");
+      img.src = c.src;
+      img.alt = c.name;
+      img.className = "char-multi-thumb";
+      item.appendChild(img);
+    }
+    list.appendChild(item);
+  });
+  syncMaterialSelectFromMulti(settings.materialSelected);
+}
+
+function syncMaterialSelectFromMulti(names) {
+  const sel = document.getElementById("materialSelect");
+  if (!sel) return;
+  Array.from(sel.options).forEach(o => {
+    o.selected = !!(o.value && o.value !== "__none__" && names.includes(o.value));
+  });
+}
+
+function onMaterialSelectMultiChange() {
+  const sel = document.getElementById("materialSelect");
+  const list = document.getElementById("materialMultiList");
+  if (!sel) return;
+  const names = Array.from(sel.selectedOptions).map(o => o.value).filter(v => v && v !== "__none__");
+  settings.materialSelected = names;
+  saveSettings();
+  if (list) {
+    list.querySelectorAll("input[type='checkbox']").forEach(cb => {
+      cb.checked = names.includes(cb.value);
+    });
+  }
+}
+
+// 自動新增素材時仍可重新掃描圖像庫。
+function updateMaterialScanState() {
+  const btn = document.getElementById("scanMaterials");
+  const hint = document.getElementById("materialHint");
+  const sel = document.getElementById("materialSelect");
+  const multiList = document.getElementById("materialMultiList");
+  if (!btn || !hint) return;
+  const span = btn.querySelector("span");
+  if (settings.materialEnabled) {
+    btn.disabled = false;
+    btn.classList.remove("disabled");
+    if (span) span.textContent = t("btnScanMaterials");
+    hint.textContent = (settings.materialNames || []).length
+      ? t("scanMaterialFound", settings.materialNames.length) : t("hintMaterialScan");
+    if (sel) { sel.disabled = true; sel.classList.add("disabled"); }
+    if (multiList) {
+      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = true; });
+    }
+  } else {
+    btn.disabled = false;
+    btn.classList.remove("disabled");
+    if (span) span.textContent = t("btnScanMaterials");
+    hint.textContent = t("hintMaterialScan");
+    if (sel) { sel.disabled = false; sel.classList.remove("disabled"); }
+    if (multiList) {
+      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = false; });
+    }
+  }
+}
+
 // 自動匹配模式下，各段 prompt 命中角色的顯示清單（含縮圖，跟每段秒數面板一致）
 function renderAutoMatchSegments() {
   const promptsEl = document.getElementById("prompts");
@@ -2315,72 +2971,94 @@ function renderAutoMatchSegments() {
   return wrap.childNodes.length > 0 ? wrap : null;
 }
 
-// ---------------- Not Flow project forced modal ----------------
-// 強制彈出訊息框：不在 Flow 專案頁面時鎖定全部操作、無法手動關閉；
-// 切換回 Flow 頁面後自動消失、功能恢復。
-let notFlowLocked = false;
+// ---------------- Not Flow page reminder (dismissible) ----------------
+// 提醒制：不在 Flow 分頁時只跳出提醒，按「確定」即可關閉並繼續使用；
+// 每次切換分頁（tab activated / updated、視窗焦點切換、background 廣播）若仍不在 Flow 會再提醒一次。
+// 在 Flow 頁時自動隱藏。
+let notFlowLocked = false; // 保留相容：提醒制下永遠為 false，不再鎖定操作
+let notFlowDismissed = false;
 let notFlowCheckTimer = null;
+let lastNotFlowState = null; // 上一次實際頁面狀態：true=不在Flow / false=在Flow / null=未知
 
-async function showNotFlowWarning() {
+function setNotFlowModalVisible(visible) {
   const modal = document.getElementById("notFlowModal");
   if (!modal) return;
-  let isFlowProject = false;
+  modal.classList.toggle("hidden", !visible);
+  document.body.classList.remove("notflow-locked");
+  notFlowLocked = false;
+}
+
+// 共用偵測：使用者「當前正在看的分頁」是否在 Flow 上。
+// 只看當前頁，不看别處有没有 Flow 分頁開著（否則切到別頁也永遠不提醒）。
+async function isOnFlowPage() {
   try {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-      // v1.9.1 已驗證的成功實作：直接查詢目前活動分頁網址（tabs 權限在 side panel 可用）；
-      // 支援任何語言路徑：/fx/tools/flow、/fx/zh/tools/flow、/fx/en/tools/flow 等
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const url = tabs[0]?.url || "";
-      isFlowProject = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
-    } else {
-      isFlowProject = false;
+      // 優先用最後聚焦視窗的 active tab（即使用者正在看的那頁）
+      try {
+        const focused = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const cur = (focused || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
+        if (cur.length > 0) return FLOW_RE.test(cur[0]?.url || "");
+      } catch (e) { /* 掉到下方兜底 */ }
+      // 兜底（side panel 獨立 window 取不到焦點視窗時）：所有視窗的 active tab 任一在 Flow 即視為在 Flow
+      const tabs = await chrome.tabs.query({ active: true });
+      const extFree = (tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
+      return (extFree || []).some(t => FLOW_RE.test(t?.url || ""));
     }
-  } catch (e) {
-    isFlowProject = false;
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+async function showNotFlowWarning() {
+  const onFlow = await isOnFlowPage();
+  // 診斷：把實際看到的 URL 寫進調試日誌，方便回報偵測問題
+  try {
+    if (typeof addDebugLine === "function" && chrome?.tabs?.query) {
+      const tabs = await chrome.tabs.query({ active: true });
+      const seen = ((tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://")) || [])
+        .map(t => t?.url || "(no url)").join(" | ").slice(0, 300);
+      addDebugLine("[FlowDetect] active=[" + seen + "] onFlow=" + onFlow, onFlow ? "info" : "error");
+    }
+  } catch (e) { /* ignore */ }
+  lastNotFlowState = !onFlow;
+  if (onFlow) {
+    // 在 Flow 頁：自動隱藏，並重置已關閉旗標
+    notFlowDismissed = false;
+    setNotFlowModalVisible(false);
+  } else {
+    // 不在 Flow：每次主動檢測都重新提醒（切換頁面會呼叫此函式）
+    notFlowDismissed = false;
+    setNotFlowModalVisible(true);
   }
-  const willLock = !isFlowProject;
-  modal.classList.toggle("hidden", !willLock);
-  document.body.classList.toggle("notflow-locked", willLock);
-  // 鎖定期間攔截鍵盤操作（防止 Tab/Enter/Space 操作底層 UI）
-  notFlowLocked = willLock;
-  // 啟動持續輪詢：無論目前是否鎖定，都持續監控活動分頁；
-  // 切回 Flow 頁面時自動解除鎖定；離開 Flow 切換到其他頁面時，彈窗會重新彈出並再次鎖定
+  // 啟動持續輪詢作為兜底：只在「實際頁面狀態翻轉」時動作，
+  // 停在同一頁時不打擾（按確定關掉後不會每秒重彈）
   clearInterval(notFlowCheckTimer);
-  let lastFlowState = willLock;
   notFlowCheckTimer = setInterval(async () => {
     try {
-      if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const url = tabs[0]?.url || "";
-        const onFlow = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(url);
-        const shouldLock = !onFlow;
-        if (shouldLock !== lastFlowState) {
-          lastFlowState = shouldLock;
-          modal.classList.toggle("hidden", !shouldLock);
-          document.body.classList.toggle("notflow-locked", shouldLock);
-          notFlowLocked = shouldLock;
-          // 批次任務執行中離開 Flow 頁面：提示使用者不可離開，否則流程會中斷
-          if (shouldLock && running) {
-            toast(t("toastLeaveFlow"));
-          }
+      const nowOnFlow = await isOnFlowPage();
+      const nowNotFlow = !nowOnFlow;
+      if (nowNotFlow !== lastNotFlowState) {
+        lastNotFlowState = nowNotFlow;
+        if (nowOnFlow) {
+          notFlowDismissed = false;
+          setNotFlowModalVisible(false);
+        } else {
+          // Flow → 非 Flow：重置旗標並提醒；批次執行中加 toast 警告
+          notFlowDismissed = false;
+          setNotFlowModalVisible(true);
+          if (running) toast(t("toastLeaveFlow"));
         }
       }
     } catch (e) { /* ignore */ }
   }, 1000);
 }
 
-// 鍵盤/滑鼠攔截：鎖定期間底層 UI 不可操作
-document.addEventListener("keydown", e => {
-  if (notFlowLocked && !e.target.closest("#notFlowModal")) e.preventDefault();
-}, true);
-document.addEventListener("click", e => {
-  if (notFlowLocked && !e.target.closest("#notFlowModal")) e.stopImmediatePropagation();
-}, true);
-document.addEventListener("wheel", e => {
-  if (notFlowLocked && !e.target.closest("#notFlowModal")) e.preventDefault();
-}, { passive: false, capture: true });
+// 提醒被關閉後不再攔截任何操作（提醒制：可繼續使用）
+function dismissNotFlowModal() {
+  notFlowDismissed = true;
+  setNotFlowModalVisible(false);
+}
 
-// 共用偵測：不在 Flow 專案頁面時傳回 true（應鎖定）。
+// 共用偵測：不在 Flow 專案頁面時傳回 true（應提醒）。
 // 主要走 background service worker（有 tabs 權限，不受 side panel 視窗限制）；
 // file:// 預覽模式則回退到本頁的直接查詢。
 async function detectNotFlow() {
@@ -2412,41 +3090,86 @@ async function detectNotFlow() {
   } catch (e) { /* not in extension context */ }
   try {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-      const tabs = await chrome.tabs.query({ active: true });
-      const extTabs = (tabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
-      const anyTab = extTabs[0]?.url || "";
-      const onActive = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i.test(anyTab);
-      const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*/tools/flow*" });
-      return !(onActive || flowTabs.length > 0);
+      return !(await isOnFlowPage());
     }
   } catch (e) { /* ignore */ }
   // Preview mode (file://) 或查詢失敗：一律視為不在 Flow（安全預設）
   return !bgReplied;
 }
 
-// 啟動後立即偵測一次，之後每 1 秒持續輪詢分頁切換狀態（離開 Flow 會重彈、切回 Flow 會自動解除）
+// 點擊縮圖放大（角色/素材多選清單＋自動匹配 chips 共用；動態列表用委派）
+function openImageLightbox(src, alt) {
+  closeImageLightbox();
+  const ov = document.createElement("div");
+  ov.id = "imgLightbox";
+  ov.className = "imglight-overlay";
+  const img = document.createElement("img");
+  img.src = src;
+  img.alt = alt || "";
+  img.className = "imglight-img";
+  const x = document.createElement("button");
+  x.className = "imglight-close";
+  x.textContent = "✕";
+  x.setAttribute("aria-label", "關閉");
+  ov.appendChild(img);
+  ov.appendChild(x);
+  ov.addEventListener("click", closeImageLightbox);
+  document.body.appendChild(ov);
+}
+function closeImageLightbox() {
+  const ov = document.getElementById("imgLightbox");
+  if (ov) ov.remove();
+}
+try {
+  document.addEventListener("click", e => {
+    const thumb = e.target && e.target.closest ? e.target.closest(".char-multi-thumb, .auto-match-thumb") : null;
+    if (thumb && thumb.src) openImageLightbox(thumb.src, thumb.alt || "");
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeImageLightbox();
+  });
+} catch (e) { /* ignore */ }
+
+// 啟動後立即偵測一次；切換分頁/視窗焦點時重新檢測（不在 Flow 就再提醒一次）
+try {
+  document.getElementById("btnDismissNotFlow")?.addEventListener("click", dismissNotFlowModal);
+} catch (e) { /* ignore */ }
 (async () => { try { await showNotFlowWarning(); } catch (e) { /* ignore */ } })();
 
-// 瀏覽器視窗焦點切換時也立即重檢（解決切離 Flow 後彈窗未及時彈出的問題）
+// 每次切換頁面都重新檢測：分頁切換、網址導航、視窗焦點切換
 try {
+  if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(() => { try { showNotFlowWarning(); } catch (e) { /* ignore */ } });
+  }
+  if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.onUpdated) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo && changeInfo.url) { try { showNotFlowWarning(); } catch (e) { /* ignore */ } }
+    });
+  }
   if (typeof chrome !== "undefined" && chrome.windows && chrome.windows.onFocusChanged) {
     chrome.windows.onFocusChanged.addListener(() => { try { showNotFlowWarning(); } catch (e) { /* ignore */ } });
   }
 } catch (e) { /* ignore */ }
 
-// 接收 background 主動廣播的 Flow 狀態（tabs.onUpdated / onFocusChanged 觸發），
-// 面板常駐時也能即時同步：不在 Flow 時重彈、切回 Flow 時自動解除
+// 接收 background 主動廣播的 Flow 狀態（tabs.onUpdated / onFocusChanged 觸發）。
+// 提醒制：只在實際頁面狀態翻轉時動作；已按確定關掉後不再重彈，直到下次切換頁面。
 try {
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((msg) => {
       try {
         if (msg && msg.type === "FLOW_STATE" && typeof msg.isOnFlow === "boolean") {
-          const modal = document.getElementById("notFlowModal");
-          if (!modal) return;
-          const shouldLock = !msg.isOnFlow;
-          modal.classList.toggle("hidden", !shouldLock);
-          document.body.classList.toggle("notflow-locked", shouldLock);
-          notFlowLocked = shouldLock;
+          const nowNotFlow = !msg.isOnFlow;
+          if (nowNotFlow !== lastNotFlowState) {
+            lastNotFlowState = nowNotFlow;
+            if (msg.isOnFlow) {
+              notFlowDismissed = false;
+              setNotFlowModalVisible(false);
+            } else if (!notFlowDismissed) {
+              setNotFlowModalVisible(true);
+            }
+          } else if (msg.isOnFlow) {
+            setNotFlowModalVisible(false);
+          }
         }
       } catch (e) { /* ignore */ }
     });
@@ -2455,8 +3178,8 @@ try {
 
 // ---------------- Flow tab management ----------------
 async function ensureFlowTab() {
-  // 支援任何語言路徑版本：/fx/tools/flow、/fx/zh/tools/flow、/fx/en/tools/flow
-  const tabs = await chrome.tabs.query({ url: "https://labs.google/fx/*tools/flow*" });
+  // 支援舊版 labs.google 任何語言路徑 + 新版 flow.google.com
+  const tabs = await chrome.tabs.query({ url: FLOW_TAB_URLS });
   if (tabs.length > 0) {
     await chrome.tabs.update(tabs[0].id, { active: true });
     return tabs[0];
@@ -2516,6 +3239,13 @@ async function startBatch(resumeIndex) {
     return;
   }
 
+  // @檔名 is an explicit request to attach an image. Scan once even when the
+  // broad automatic-material toggle is off, so exact @ matching can work.
+  const hasExplicitAssetRef = queue.some(item => /@[A-Za-z0-9_\-\u4e00-\u9fff]/.test(item.text || ""));
+  if (settings.materialEnabled || hasExplicitAssetRef) {
+    await scanMaterials(tab);
+  }
+
   // Merge checkpoint frames (previous chain last-frame copies) into uploaded frames
   let framesForConfig = uploadedFrames.map(f => ({ name: f.name, dataUrl: f.dataUrl }));
   const cp = loadCheckpoint();
@@ -2544,6 +3274,7 @@ async function startBatch(resumeIndex) {
     defaultMode: settings.defaultMode,
     imageMode: settings.imageMode,
     videoRes: settings.videoRes,
+    generationRes: settings.generationRes || "",
     imageRes: settings.imageRes,
     charEnabled: settings.charEnabled,
     charSelected: Array.isArray(settings.charSelected) ? settings.charSelected : [],
@@ -2552,9 +3283,16 @@ async function startBatch(resumeIndex) {
     charImageEnabled: settings.charImageEnabled,
     voiceEnabled: settings.voiceEnabled,
     defaultVoice: settings.defaultVoice,
-    charNames: Array.from(document.getElementById("charSelect")?.options || [])
-      .map(o => o.value)
-      .filter(v => v && v !== "__none__"),
+    charNames: (settings.charNames && settings.charNames.length ? settings.charNames :
+      Array.from(document.getElementById("charSelect")?.options || [])
+        .map(o => o.value)
+        .filter(v => v && v !== "__none__")),
+    materialEnabled: settings.materialEnabled,
+    materialSelected: Array.isArray(settings.materialSelected) ? settings.materialSelected : [],
+    materialNames: (settings.materialNames && settings.materialNames.length ? settings.materialNames :
+      Array.from(document.getElementById("materialSelect")?.options || [])
+        .map(o => o.value)
+        .filter(v => v && v !== "__none__")),
     lang: currentLang,
   };
 
@@ -2581,7 +3319,7 @@ function stopBatch() {
   document.getElementById("btnStop").classList.add("hidden");
   // 通知內容腳本停止批次——只改 UI 不會停，worker 會繼續跑完整個佇列
   try {
-    chrome.tabs.query({ url: "https://labs.google/fx/*tools/flow*" }).then(tabs => {
+    chrome.tabs.query({ url: FLOW_TAB_URLS }).then(tabs => {
       if (tabs && tabs[0]) {
         chrome.tabs.sendMessage(tabs[0].id, { type: "STOP_BATCH" }).catch(() => {});
       }
@@ -2732,6 +3470,8 @@ function bindDebugUI() {
 // ---------------- Init ----------------
 function init() {
   currentLang = settings.lang || "zh-TW";
+  const versionBadge = document.getElementById("versionBadge");
+  if (versionBadge) versionBadge.textContent = "v" + chrome.runtime.getManifest().version;
   bindUI();
 }
 if (document.readyState === "loading") {

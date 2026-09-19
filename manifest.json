@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Auto Flow Free",
   "description": "Auto Flow your prompts at scale. Batch generate and auto-download videos and images on Google Flow. 文字轉影片、幀轉影片自動批次處理。",
-  "version": "1.9.84",
+  "version": "1.9.102",
   "permissions": [
     "activeTab",
     "tabs",
@@ -17,7 +17,9 @@
     "https://labs.google/fx/*/tools/flow/*",
     "https://labs.google/fx/tools/flow",
     "https://labs.google/fx/tools/flow/*",
-    "https://labs.google/*"
+    "https://labs.google/*",
+    "https://flow.google.com/",
+    "https://flow.google.com/*"
   ],
   "action": {
     "default_title": "Auto Flow Free",
@@ -40,7 +42,9 @@
         "https://labs.google/fx/*/tools/flow",
         "https://labs.google/fx/*/tools/flow/*",
         "https://labs.google/fx/tools/flow",
-        "https://labs.google/fx/tools/flow/*"
+        "https://labs.google/fx/tools/flow/*",
+        "https://flow.google.com/",
+        "https://flow.google.com/*"
       ],
       "js": [
         "flow-automation.js"

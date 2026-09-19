@@ -20,17 +20,24 @@ chrome.runtime.onStartup.addListener(() => {
 // source of "is the browser currently on a Flow project page". Whenever the state
 // changes it broadcasts { type: "FLOW_STATE", isOnFlow } to every extension page
 // (side panel / popup), which shows/hides the forced not-flow modal.
-const FLOW_RE = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow/i;
+// Flow 雙網址：舊版 labs.google/fx/(語言/)?tools/flow + 新版 flow.google.com
+const FLOW_RE = /labs\.google\/fx\/(?:[^/]+\/)?tools\/flow|flow\.google\.com/i;
+const FLOW_TAB_URLS = ["*://labs.google/fx/*tools/flow*", "*://flow.google.com/*"];
 let lastBroadcastOnFlow = null;
 
 async function getFlowState() {
   try {
-    // Any active tab in any window that is not an extension page
+    // 提醒制：只看使用者「當前正在看的分頁」，不看别處有没有 Flow 分頁開著，
+    // 否則切到別頁也永遠不提醒。優先用最後聚焦視窗的 active tab。
+    try {
+      const focused = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const cur = (focused || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
+      if (cur.length > 0) return FLOW_RE.test(cur[0]?.url || "");
+    } catch (e) { /* 掉到下方兜底 */ }
+    // 兜底：所有視窗的 active tab 任一在 Flow 即視為在 Flow
     const activeTabs = await chrome.tabs.query({ active: true });
     const extFree = (activeTabs || []).filter(t => !(t?.url || "").startsWith("chrome-extension://"));
-    const onActive = extFree.length > 0 && FLOW_RE.test(extFree[0].url || "");
-    const flowTabs = await chrome.tabs.query({ url: "*://labs.google/fx/*/tools/flow*" });
-    return onActive || flowTabs.length > 0;
+    return (extFree || []).some(t => FLOW_RE.test(t?.url || ""));
   } catch (e) {
     return null;
   }
