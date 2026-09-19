@@ -29,8 +29,6 @@ const i18n = {
     hintPrompts: "用空行分隔每個 prompt。",
     toggleCharacter: "自動新增角色 (Google Flow 功能)",
     hintCharacter: "當提示詞中提及角色時，自動選擇對應角色。",
-    toggleMaterial: "自動新增素材 (Google Flow 素材庫)",
-    hintMaterial: "當提示詞中提及素材時，自動選擇對應素材加入提示詞。",
     labelDefaultChar: "預設角色",
     labelCharMulti: "掃描到的角色（多選）",
     hintCharScan: "尚未掃描任何角色。請先在 Google Flow 專案中建立角色，然後點選「掃描角色」，即可列出角色供選取。",
@@ -42,6 +40,10 @@ const i18n = {
     toggleVoice: "自動套用語音（按說話者自動選語音）",
     toggleAgent: "智慧體自動生成",
     hintAgent: "打開後切換為智慧體自動化模式，提示詞輸入改由 Agent 流程處理；關閉後回到原本模式。",
+    labelAgentOutput: "智慧體創作目標",
+    agentCreateImage: "建立圖片",
+    agentCreateVideo: "建立影片",
+    hintAgentOutput: "選擇智慧體本次要建立的內容，執行時會將目標加入 Agent 指令。",
     hintVoice: "啟用後，自動選擇語音並填入 Flow 的語音設定欄位：prompt 提到說話者名稱時自動選擇對應語音，否則使用「預設說話者」（選「無」則未命中的段落不設定語音，由 Flow 依內建行為處理）。角色對話的聲音由 Veo 自動生成（男女聲自動配對），與此設定無關。某段不想套用語音時，可在該段 prompt 加入 [NOVOICE]。",
     labelDefaultVoice: "預設說話者（未命中時使用的語音）",
     voiceDefault: "未設定語音",
@@ -59,6 +61,7 @@ const i18n = {
     hintFolder: "下載檔案的子資料夾。",
     hintSettingsMore: "在「設定」分頁中自訂寬高比、時長與數量以獲得更多控制。",
     toggleRename: "自動重新命名檔案",
+    toggleAutoDownload: "生成後自動下載",
     labelImageMode: "預設圖片模式",
     hintImageMode: "圖片提示詞的預設輸入選項。最後一個提示詞將使用新圖片。",
     imageModeNew: "新圖片", imageModeLast: "上一張圖片",
@@ -221,8 +224,6 @@ const i18n = {
     hintPrompts: "Separate each prompt with blank lines.",
     toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "Automatically select the character when it is mentioned in a prompt.",
-    toggleMaterial: "Auto-add materials (Google Flow library)",
-    hintMaterial: "Automatically select matching materials and add them to the prompt when mentioned.",
     labelDefaultChar: "Default character",
     labelCharMulti: "Scanned characters (multi-select)",
     hintCharScan: "No characters scanned yet. Create characters in your Flow project first, then click \"Scan characters\" to list them for selection.",
@@ -234,6 +235,10 @@ const i18n = {
     toggleVoice: "Auto-apply voice (auto-select voice by speaker)",
     toggleAgent: "Agent auto-generate",
     hintAgent: "When on, switches to Agent Automation mode so prompts go through the agent flow; turning it off restores the previous mode.",
+    labelAgentOutput: "Agent creation target",
+    agentCreateImage: "Create images",
+    agentCreateVideo: "Create videos",
+    hintAgentOutput: "The selected target is included in the instruction sent to the Agent.",
     hintVoice: "When enabled, the extension automatically selects a voice and fills in Flow's voice setting field: if a prompt mentions a speaker name, that voice is used; otherwise the 'Default speaker' is used (select 'None' to leave unmatched segments unset, letting Flow follow its default behavior). Character dialogue is voiced automatically by Veo (male/female matched by character) and is not affected by this setting. To skip voice assignment for a segment, add [NOVOICE] to that prompt.",
     labelDefaultVoice: "Default speaker (used when no name is matched)",
     voiceDefault: "No voice configured",
@@ -251,6 +256,7 @@ const i18n = {
     hintFolder: "Sub-folder for downloaded files.",
     hintSettingsMore: "Customize aspect ratio, duration and count in the Settings tab for more control.",
     toggleRename: "Auto rename files",
+    toggleAutoDownload: "Download after generation",
     labelImageMode: "Default image mode",
     hintImageMode: "Default input option for image prompts. The last prompt will always use a new image.",
     imageModeNew: "New image", imageModeLast: "Previous image",
@@ -418,8 +424,6 @@ const i18n = {
     hintPrompts: "用空行分隔每个 prompt。",
     toggleCharacter: "Auto-add character (Google Flow feature)",
     hintCharacter: "当提示词中提及角色时，自动选择对应角色。",
-    toggleMaterial: "自动新增素材 (Google Flow 素材库)",
-    hintMaterial: "当提示词中提及素材时，自动选择对应素材加入提示词。",
     labelDefaultChar: "默认角色",
     labelCharMulti: "扫描到的角色（多选）",
     hintCharScan: "尚未扫描任何角色。请先在 Google Flow 项目中创建角色，然后点击「扫描角色」，即可列出角色供选取。",
@@ -431,6 +435,10 @@ const i18n = {
     toggleVoice: "自动应用语音（按说话者自动选语音）",
     toggleAgent: "智能体自动生成",
     hintAgent: "打开后切换为智能体自动化模式，提示词输入改由 Agent 流程处理；关闭后回到原本模式。",
+    labelAgentOutput: "智能体创作目标",
+    agentCreateImage: "建立图片",
+    agentCreateVideo: "建立视频",
+    hintAgentOutput: "执行时会将所选目标加入发送给智能体的指令。",
     hintVoice: "启用后，自动选择语音并填入 Flow 的语音设置栏位：prompt 提到说话者名称时自动选择对应语音，否则使用「默认说话者」（选「无」则未命中的段落不设置语音，由 Flow 依内置行为处理）。角色对话的声音由 Veo 自动生成（男女声自动配对），与此设置无关。某段不想套用语音时，可在该段 prompt 加入 [NOVOICE]。",
     labelDefaultVoice: "默认说话者（未命中时使用的语音）",
     voiceDefault: "未配置语音",
@@ -448,6 +456,7 @@ const i18n = {
     hintFolder: "下载文件的子文件夹。",
     hintSettingsMore: "在「设置」标签中自定义宽高比、时长和数量以获得更多控制。",
     toggleRename: "自动更改文件名",
+    toggleAutoDownload: "生成后自动下载",
     labelImageMode: "默认图片模式选项",
     hintImageMode: "图片提示词的默认输入选项。最后一个提示词将始终使用新图片。",
     imageModeNew: "新图片", imageModeLast: "上一张图片",
@@ -1036,19 +1045,20 @@ function loadSettings() {
     charEnabled: false,
     charSelected: [],
     defaultChar: "",
-    materialEnabled: false,
     maxImages: 2,
     charImageEnabled: false,
     voiceEnabled: false,
     defaultVoice: "",
     outputCount: 1,
     folder: "veo-folder-1",
+    autoDownload: true,
     rename: true,
     aspect: "16:9",
     model: "veo3.1-fast",
     imageModel: "nano-banana-2",
     defaultMode: "text2video",
     agentPrevMode: "text2video",
+    agentOutput: "image",
     imageMode: "new",
     videoRes: "1080p",
     generationRes: "",
@@ -1063,7 +1073,10 @@ function loadSettings() {
     charNames: [],
     materialNames: [],
   };
-  return Object.assign({}, def, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+  const loaded = Object.assign({}, def, JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+  if (loaded.model === "veo2-fast" || loaded.model === "veo2-quality") loaded.model = "veo3.1-fast";
+  if (loaded.model === "veo3.1-lite-low") loaded.model = "veo3.1-lite";
+  return loaded;
 }
 
 function saveSettings() {
@@ -1326,22 +1339,19 @@ function bindUI() {
   document.getElementById("scanChars").addEventListener("click", scanCharacters);
   updateCharScanState();
 
-  // Material matching; explicit @ names also work when this toggle is off.
-  const materialToggle = document.getElementById("materialToggle");
-  if (materialToggle) {
-    materialToggle.checked = settings.materialEnabled;
-    materialToggle.addEventListener("change", () => {
-      settings.materialEnabled = materialToggle.checked;
-      saveSettings();
-    });
-  }
-
   // Agent auto-generate toggle (shortcut for agent mode)
   const agentToggle = document.getElementById("agentToggle");
   if (agentToggle) {
     agentToggle.checked = settings.mode === "agent";
     agentToggle.addEventListener("change", () => setAgentMode(agentToggle.checked));
   }
+  document.querySelectorAll(".agent-output-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      settings.agentOutput = btn.dataset.agentOutput === "video" ? "video" : "image";
+      saveSettings();
+      updateAgentOutputUI();
+    });
+  });
 
   // Character multi-select: card checkboxes ⟷ dropdown (bidirectional sync)
   document.getElementById("charSelect").addEventListener("change", onCharSelectMultiChange);
@@ -1407,6 +1417,10 @@ function bindUI() {
   folder.value = settings.folder;
   folder.addEventListener("input", () => { settings.folder = folder.value.trim() || "veo-folder-1"; saveSettings(); });
 
+  const autoDownloadToggle = document.getElementById("autoDownloadToggle");
+  autoDownloadToggle.checked = settings.autoDownload !== false;
+  autoDownloadToggle.addEventListener("change", () => { settings.autoDownload = autoDownloadToggle.checked; saveSettings(); });
+
   // Auto rename
   const ren = document.getElementById("renameToggle");
   ren.checked = settings.rename;
@@ -1419,7 +1433,14 @@ function bindUI() {
     aspectSel.addEventListener("change", e => { settings.aspect = e.target.value; saveSettings(); });
   }
   const modelSel = document.getElementById("modelSelect");
-  if (modelSel) { modelSel.value = settings.model; modelSel.addEventListener("change", e => { settings.model = e.target.value; saveSettings(); }); }
+  if (modelSel) {
+    modelSel.value = settings.model;
+    modelSel.addEventListener("change", e => {
+      settings.model = e.target.value;
+      updateGenerationResolutionUI();
+      saveSettings();
+    });
+  }
   const dlResSel = document.getElementById("downloadRes");
   if (dlResSel) { dlResSel.value = settings.downloadRes; dlResSel.addEventListener("change", e => { settings.downloadRes = e.target.value; saveSettings(); }); }
   document.getElementById("durationSelect").value = String(settings.duration);
@@ -1434,6 +1455,7 @@ function bindUI() {
   if (vidResSel) { vidResSel.value = settings.videoRes; vidResSel.addEventListener("change", e => { settings.videoRes = e.target.value; saveSettings(); }); }
   const genResSel = document.getElementById("generationResSelect");
   if (genResSel) { genResSel.value = settings.generationRes || ""; genResSel.addEventListener("change", e => { settings.generationRes = e.target.value; saveSettings(); }); }
+  updateGenerationResolutionUI();
   const imgResSel = document.getElementById("imageResSelect");
   if (imgResSel) { imgResSel.value = settings.imageRes; imgResSel.addEventListener("change", e => { settings.imageRes = e.target.value; saveSettings(); }); }
 
@@ -1499,13 +1521,14 @@ function bindUI() {
     set("frameOption", settings.frameOption);
     setChecked("chainToggle", settings.chainEnabled);
     setChecked("charToggle", settings.charEnabled);
-    setChecked("materialToggle", settings.materialEnabled);
     setChecked("agentToggle", settings.mode === "agent");
+    updateAgentOutputUI();
     set("maxImages", String(settings.maxImages));
     setChecked("charImageToggle", settings.charImageEnabled);
     setChecked("voiceToggle", settings.voiceEnabled);
     set("outputCount", String(settings.outputCount));
     set("folderName", settings.folder);
+    setChecked("autoDownloadToggle", settings.autoDownload !== false);
     setChecked("renameToggle", settings.rename);
     set("aspectSelect", settings.aspect);
     set("modelSelect", settings.model);
@@ -1516,6 +1539,7 @@ function bindUI() {
     set("imageModeSelect", settings.imageMode);
     set("videoResSelect", settings.videoRes);
     set("generationResSelect", settings.generationRes || "");
+    updateGenerationResolutionUI();
     set("imageResSelect", settings.imageRes);
     applyTheme();
     const themeSel2 = document.getElementById("themeSelect");
@@ -1598,6 +1622,7 @@ function updateModeUI() {
   const supportsCharImages = isImg2Img || settings.mode === "components2video" || settings.mode === "agent";
   const supportsVoice = settings.mode === "text2video" || settings.mode === "components2video" || settings.mode === "agent";
   document.getElementById("uploadZone").classList.toggle("hidden", !needsUploadZone);
+  document.getElementById("agentOutputCard").classList.toggle("hidden", settings.mode !== "agent");
   document.getElementById("frameOptions").classList.toggle("hidden", !isFrame);
   document.getElementById("chainCard").classList.toggle("hidden", !supportsChain);
   document.getElementById("maxImagesCard").classList.toggle("hidden", !needsMaxImages);
@@ -1626,7 +1651,29 @@ function updateModeUI() {
   // 同步 agent 開關（開關即 agent 模式的快捷鍵）
   const agentT = document.getElementById("agentToggle");
   if (agentT) agentT.checked = settings.mode === "agent";
+  updateAgentOutputUI();
   updatePerPromptDurList();
+}
+
+function updateAgentOutputUI() {
+  const selected = settings.agentOutput === "video" ? "video" : "image";
+  document.querySelectorAll(".agent-output-btn").forEach(btn => {
+    const active = btn.dataset.agentOutput === selected;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function updateGenerationResolutionUI() {
+  const card = document.getElementById("generationResCard");
+  const select = document.getElementById("generationResSelect");
+  if (!card || !select) return;
+  const isOmni = settings.model === "omni-flash";
+  card.classList.toggle("hidden", !isOmni);
+  if (isOmni && !["360p", "720p"].includes(settings.generationRes)) {
+    settings.generationRes = "720p";
+  }
+  select.value = settings.generationRes || "720p";
 }
 
 // Agent toggle 快捷鍵：ON = 切到 agent 模式（記住原模式），OFF = 回到原模式
@@ -1721,8 +1768,9 @@ function updatePerPromptDurList() {
   const card = document.getElementById("perDurCard");
   const list = document.getElementById("perDurList");
   if (!card || !list) return;
-  // 圖片模式沒有秒數概念：整張「各段秒數設定」卡直接隱藏
-  if (settings.mode === "text2image" || settings.mode === "image2image") {
+  // 圖片與智慧體模式不使用這個固定秒數設定：整張卡直接隱藏。
+  // 智慧體會依創作指令決定生成流程，且不會讀取 item.duration。
+  if (settings.mode === "text2image" || settings.mode === "image2image" || settings.mode === "agent") {
     card.classList.add("hidden");
     return;
   }
@@ -3097,10 +3145,10 @@ async function startBatch(resumeIndex) {
     return;
   }
 
-  // @檔名 is an explicit request to attach an image. Scan once even when the
-  // broad automatic-material toggle is off, so exact @ matching can work.
+  // @檔名 is an explicit request to attach an image. Scan once so exact
+  // matching can work.
   const hasExplicitAssetRef = queue.some(item => /@[A-Za-z0-9_\-\u4e00-\u9fff]/.test(item.text || ""));
-  if (settings.materialEnabled || hasExplicitAssetRef) {
+  if (hasExplicitAssetRef) {
     await scanMaterials(tab);
   }
 
@@ -3123,6 +3171,7 @@ async function startBatch(resumeIndex) {
     resumeIndex: effResume,
     outputCount: settings.outputCount,
     folder: settings.folder,
+    autoDownload: settings.autoDownload !== false,
     rename: settings.rename,
     aspect: settings.aspect,
     model: settings.model,
@@ -3130,9 +3179,10 @@ async function startBatch(resumeIndex) {
     downloadRes: settings.downloadRes,
     duration: settings.duration,
     defaultMode: settings.defaultMode,
+    agentOutput: settings.agentOutput === "video" ? "video" : "image",
     imageMode: settings.imageMode,
     videoRes: settings.videoRes,
-    generationRes: settings.generationRes || "",
+    generationRes: settings.model === "omni-flash" ? (settings.generationRes || "720p") : "",
     imageRes: settings.imageRes,
     charEnabled: settings.charEnabled,
     charSelected: Array.isArray(settings.charSelected) ? settings.charSelected : [],
@@ -3145,7 +3195,6 @@ async function startBatch(resumeIndex) {
       Array.from(document.getElementById("charSelect")?.options || [])
         .map(o => o.value)
         .filter(v => v && v !== "__none__")),
-    materialEnabled: settings.materialEnabled,
     materialNames: settings.materialNames || [],
     lang: currentLang,
   };

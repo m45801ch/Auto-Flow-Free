@@ -17,6 +17,7 @@
   let prevSegmentFrame = null;
   const chainRetriedCount = {};
   let flowCurrentMode = null; // "video" | "image": cached mode detection
+  const qualityDownloadWaiters = new Map();
 
   // Chrome message listener
   chrome.runtime.onMessage.addListener((msg) => {
@@ -37,6 +38,11 @@
       runBatch();
     } else if (msg.type === "STOP_BATCH") {
       stopped = true;
+    } else if (msg.type === "DOWNLOAD_MEDIA_FAILED") {
+      logError("Chrome download interrupted:", msg.filename, msg.error);
+      fallbackDownload(msg.url, msg.filename).catch(error => logError("Download fallback failed:", error));
+    } else if (msg.type === "FLOW_DOWNLOAD_STARTED") {
+      qualityDownloadWaiters.get(msg.token)?.(msg);
     }
   });
 
@@ -879,11 +885,47 @@
     if (found.length > 0) {
       log("[AutoScan] Flow 頁面自動掃描到素材:", JSON.stringify(found));
       config.materialNames = found;
-      if (!config.materialEnabled) {
-        config.materialEnabled = true;
-        log("[AutoScan] 已自動啟用素材加入功能");
-      }
     }
+  }
+
+  // Enable the Agent control in the composer toolbar. It is separate from the
+  // image/video model picker, so Agent jobs must not pass through that picker.
+  async function enableAgentMode() {
+    const prompt = findPromptTextarea();
+    const promptRect = prompt && prompt.getBoundingClientRect();
+    const candidates = queryAllVisible(document).filter(el => {
+      const r = el.getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0) || el.disabled || el.getAttribute("aria-disabled") === "true") return false;
+      const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+      const aria = (el.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+      const title = (el.getAttribute("title") || "").replace(/\s+/g, " ").trim();
+      if (![text, aria, title].some(label => /^(agent|智慧體|智能体)$/i.test(label))) return false;
+      return !promptRect || (r.top >= promptRect.top - 100 && r.top <= promptRect.bottom + 160 &&
+        r.left >= promptRect.left - 120 && r.left <= promptRect.right + 180);
+    });
+    candidates.sort((a, b) => {
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      const ay = promptRect ? Math.abs(ar.top - promptRect.bottom) : ar.top;
+      const by = promptRect ? Math.abs(br.top - promptRect.bottom) : br.top;
+      return ay - by || br.left - ar.left;
+    });
+    const agentButton = candidates[0];
+    if (!agentButton) {
+      log("[Agent] Composer Agent button not found");
+      return false;
+    }
+    const selected = el => el.getAttribute("aria-pressed") === "true" ||
+      el.getAttribute("aria-checked") === "true" || el.getAttribute("aria-selected") === "true" ||
+      el.classList.contains("active") || el.classList.contains("selected");
+    if (selected(agentButton)) {
+      log("[Agent] Composer Agent button already enabled");
+      return true;
+    }
+    click(agentButton);
+    await sleep(600);
+    log("[Agent] Composer Agent button clicked", selected(agentButton) ? "and enabled" : "");
+    return true;
   }
 
   // Choose the creation type beside the prompt, then read the toolbar again.
@@ -938,49 +980,83 @@
     logOptionCandidates("Aspect not found. Ratio candidates:", btns);
   }
 
-  function setModel() {
-    if (!config.model) return;
+  function isSettingsPanelOpen(kind) {
+    return queryAllVisible(document).some(el => {
+      const r = el.getBoundingClientRect();
+      if (!(r.width >= 100 && r.width <= 420 && r.height >= 20 && r.height <= 100)) return false;
+      const label = (el.textContent || "").replace(/\s+/g, " ").trim();
+      // 面板內的模型按鈕可能帶 emoji/圖示前綴（如 "🍌 Nano Banana 2 ..."），
+      // 判斷時先去掉開頭的非文字元號，emoji 本身不做任何修改。
+      const clean = label.replace(/^[^\p{L}\p{N}]+/u, "");
+      if (kind === "video") return /^(?:Veo\s*3\.1\s*-\s*(?:Lite|Fast|Quality)|Omni\s*1\.1\s*Flash)\b/i.test(clean);
+      return /^Nano Banana(?: 2(?: Lite)?| Pro)?\b/i.test(clean);
+    });
+  }
+
+  async function setModel() {
+    if (!config.model) return true;
     // Flow UI 顯示的模型名稱（含 dash）
     const map = {
       "veo3.1-lite": "Veo 3.1 - Lite",
-      "veo3.1-lite-low": "Veo 3.1 - Lite",
       "veo3.1-fast": "Veo 3.1 - Fast",
       "veo3.1-quality": "Veo 3.1 - Quality",
-      "omni-flash": "Omni Flash",
-      "veo2-fast": "Veo 2 - Fast",
-      "veo2-quality": "Veo 2 - Quality",
+      "omni-flash": "Omni 1.1 Flash",
     };
     const label = map[config.model] || config.model;
     // 方法1：嘗試直接 selectByText
-    if (selectByText(label)) { log("Model set to", label); return; }
+    // Do not use selectByText here: it can click a stale option from another
+    // Flow panel. Open and verify the actual video-model dropdown instead.
     // 方法2：找面板內的模型下拉選單（含 V 向下箭頭圖示的按鈕）
     const norm = s => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
-    const targetLower = norm(label);
+    const modelKey = value => String(value || "").toLowerCase()
+      .replace(/arrow_drop_(?:down|up)|expand_(?:more|less)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+    const targetLower = modelKey(label);
+    const elementLabel = el => [el.textContent, el.getAttribute("aria-label"), el.getAttribute("title")]
+      .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const allVisibleElements = () => [...new Set([
+      ...Array.from(document.querySelectorAll("button, [role='button']")),
+      ...queryAllVisible(document),
+    ])];
     // 用 queryAllVisible 搜尋所有可見元素（含 Shadow DOM）
-    const allEls = queryAllVisible(document);
-    const dropdownTrigger = allEls.find(el => {
+    const allEls = allVisibleElements();
+    const dropdownTriggers = allEls.filter(el => {
       const r = el.getBoundingClientRect();
-      if (!(r.width > 50 && r.height > 15 && r.height < 80)) return false;
-      const t = norm(el.textContent);
-      // 含模型名稱（Veo/omni）和速度描述（fast/lite/quality/flash）
-      return /veo|omni/.test(t) && /fast|lite|quality|flash/.test(t);
+      if (!(r.width >= 100 && r.width <= 420 && r.height >= 20 && r.height <= 100)) return false;
+      const t = modelKey(elementLabel(el));
+      // The currently selected Flow model is a labelled button. Some builds
+      // expose the arrow as an icon node, so it must not be a requirement.
+      return /\b(?:veo|omni)\b/.test(t) && /\b(?:fast|lite|quality|flash)\b/.test(t);
     });
+    const dropdownTrigger = dropdownTriggers.sort((a, b) => {
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      const aMarker = /arrow_drop_(?:down|up)|expand_(?:more|less)/i.test(elementLabel(a)) ? 1 : 0;
+      const bMarker = /arrow_drop_(?:down|up)|expand_(?:more|less)/i.test(elementLabel(b)) ? 1 : 0;
+      return bMarker - aMarker || (ar.width * ar.height) - (br.width * br.height);
+    })[0];
     if (dropdownTrigger) {
-      log("[Model] Found dropdown trigger:", (dropdownTrigger.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40));
+      if (modelKey(elementLabel(dropdownTrigger)).includes(targetLower)) {
+        log("Model already selected:", label);
+        return true;
+      }
+      log("[Model] Opening dropdown:", elementLabel(dropdownTrigger).slice(0, 60));
       click(dropdownTrigger);
       // 等待 dropdown 展開（多層等待）
       return new Promise(resolve => {
         let attempts = 0;
-        const maxAttempts = 5;
+        const maxAttempts = 8;
         const tryFind = () => {
           attempts++;
-          const options = queryAllVisible(document).filter(el => {
+          const options = allVisibleElements().filter(el => {
+            if (el === dropdownTrigger) return false;
             const r = el.getBoundingClientRect();
             if (!(r.width > 20 && r.height > 10)) return false;
-            const t = norm(el.textContent);
-            // 匹配：含 "veo" 和 "lite"（忽略空格/dash/emoji）
+            const t = modelKey(elementLabel(el));
+            // Match the exact requested model. Flow may start with any model,
+            // including Omni, so this cannot be limited to Veo Lite.
             const clean = t.replace(/[\s\-_🎤🔊🎶🎵]/g, " ").trim();
-            return clean.includes("veo") && clean.includes("lite");
+            return clean.includes(targetLower);
           });
           if (options.length > 0) {
             // 取最小的元素（最精確的匹配）
@@ -990,8 +1066,27 @@
               return (ra.width * ra.height) - (rb.width * rb.height);
             })[0];
             click(best);
-            log("Model set to", label, "(from dropdown, attempt", attempts, ")");
-            resolve();
+            // Do not continue merely because an item was clicked. Flow must
+            // refresh the selected-model button to the requested model first.
+            setTimeout(() => {
+              const selectedButtons = allVisibleElements().filter(el => {
+                const r = el.getBoundingClientRect();
+                if (!(r.width >= 100 && r.width <= 420 && r.height >= 20 && r.height <= 100)) return false;
+                const key = modelKey(elementLabel(el));
+                return key.includes(targetLower) && /\b(?:veo|omni)\b/.test(key) &&
+                  /\b(?:fast|lite|quality|flash)\b/.test(key) &&
+                  /arrow_drop_(?:down|up)|expand_(?:more|less)/i.test(elementLabel(el));
+              });
+              if (selectedButtons.length > 0) {
+                log("Model set to", label, "(dropdown attempt", attempts, ")");
+                resolve(true);
+              } else if (attempts < maxAttempts) {
+                setTimeout(tryFind, 400);
+              } else {
+                log("Model click did not apply:", label);
+                resolve(false);
+              }
+            }, 900);
           } else if (attempts < maxAttempts) {
             setTimeout(tryFind, 600);
           } else {
@@ -1003,13 +1098,14 @@
               }).map(el => norm(el.textContent).slice(0, 30))
             ));
             try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch(e) {}
-            resolve();
+            resolve(false);
           }
         };
         setTimeout(tryFind, 1000); // 首次等待1秒
       });
     }
-    log("Model not found in UI:", label, "available:", JSON.stringify(optionLabels(15)));
+    log("Model dropdown trigger not found:", label, "available:", JSON.stringify(optionLabels(15)));
+    return false;
   }
 
   function setImageModel() {
@@ -1101,19 +1197,30 @@
     log("Duration not found:", candidates[0], "- 此模型可能不支援時長設定");
   }
 
-  function setGenerationResolution() {
+  async function setGenerationResolution() {
     if (!config.generationRes) return;
     const target = String(config.generationRes).toLowerCase();
-    const candidates = queryAllVisible(document).filter(el => {
-      if (!el.matches("button, [role='button'], [role='radio'], [role='option']")) return false;
-      const r = el.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return false;
-      const label = ((el.textContent || "") + " " + (el.getAttribute("aria-label") || "")).trim().toLowerCase();
-      return new RegExp("(^|\\s)" + target.replace("p", "\\s*p") + "($|\\s)").test(label);
-    });
-    if (!candidates.length) throw new Error("Flow generation resolution option not found: " + target);
-    click(candidates[0]);
-    log("Generation resolution set to", target);
+    const targetRe = new RegExp("(^|\\s)" + target.replace("p", "\\s*p") + "($|\\s)");
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      const candidates = queryAllVisible(document).filter(el => {
+        const r = el.getBoundingClientRect();
+        if (!(r.width > 20 && r.height > 10 && r.width < 240 && r.height < 100)) return false;
+        const label = ((el.textContent || "") + " " + (el.getAttribute("aria-label") || "")).trim().toLowerCase();
+        return targetRe.test(label);
+      });
+      if (candidates.length) {
+        const option = candidates.sort((a, b) => {
+          const ar = a.getBoundingClientRect();
+          const br = b.getBoundingClientRect();
+          return (ar.width * ar.height) - (br.width * br.height);
+        })[0];
+        click(option);
+        log("Generation resolution set to", target, "(attempt", attempt + ")");
+        return true;
+      }
+      await sleep(400);
+    }
+    throw new Error("Flow generation resolution option not found: " + target);
   }
 
   // --------------- Add matched assets via "+" button ---------------
@@ -1974,23 +2081,12 @@
     }
     return false;
   }
-  // 素材名單比對：一般文字匹配由開關控制；使用 @檔名 是明確指令，
-  // 只要已有掃描名單就必須加入對應圖像。
+  // 素材只接受 @檔名 的明確指令，避免普通文字誤加入同名素材。
   function materialsInText(text) {
-    const hasExplicitAsset = /@[A-Za-z0-9_\-\u4e00-\u9fff]/.test(text || "");
-    if (!config.materialEnabled && !hasExplicitAsset) return [];
-    const p = normBase(text);
-    // 自動模式使用圖像庫掃描到的全部名稱；舊的手動勾選不得縮小搜尋範圍。
     const pool = config.materialNames || [];
-    const allNames = pool.map(n => (n || "").trim()).filter(Boolean);
-    return allNames
+    return pool
       .map(n => (n || "").trim())
-      .filter(n => {
-        const nn = normBase(n);
-        if (!nn) return false;
-        return text.includes("@") ? markedNameInText(text, n) :
-          (charHitInContext(p, nn, allNames) || tokensSubset(nn, p) || tokensSubset(n, text));
-      });
+      .filter(n => n && markedNameInText(text, n));
   }
   // 角色＋素材聯集（去重），+ picker 加入與檔名配圖共用
   function charsAndMaterialsInText(text) {
@@ -2063,94 +2159,201 @@
   }
 
   // Track generation progress & download
-  let observedNodes = null;
   const downloadUrls = new Set();
+  let qualityDownloadLock = Promise.resolve();
+  function findGeneratedMedia(root = document) {
+    const media = Array.from(root.querySelectorAll("video, img"));
+    root.querySelectorAll("*").forEach(el => {
+      if (el.shadowRoot) media.push(...findGeneratedMedia(el.shadowRoot));
+    });
+    return media;
+  }
   function snapshotMedia() {
-    return new Set(Array.from(document.querySelectorAll("video, img")).map(m => m.src || m.currentSrc));
+    return new Set(findGeneratedMedia().map(m => m.currentSrc || m.src).filter(Boolean));
   }
   let mediaBefore = snapshotMedia();
 
   function shouldDownloadMedia(url, el) {
     if (!url) return false;
-    if (/redirect|getMediaUrl|avatar|profile|icon|emoji|placeholder/i.test(url)) return false;
-    if (/=(?:s|w|h)\d{1,4}(?:-c)?([?&]|$)/i.test(url)) return false;
+    if (/avatar|profile|icon|emoji|placeholder/i.test(url)) return false;
     const u = url.split("?")[0];
     if (el && el.tagName === "VIDEO") {
       if (/^blob:/i.test(url)) return true;
       if (el.videoWidth > 0 && el.duration > 0) return true;
       return false;
     }
-    if (/\.(png|jpe?g|webp|gif)$/i.test(u)) {
+    if (/\.(png|jpe?g|webp|gif)$/i.test(u) || el?.tagName === "IMG") {
       const w = (el && (el.naturalWidth || el.width)) || 0;
-      if (w >= 200) return true;
+      const h = (el && (el.naturalHeight || el.height)) || 0;
+      if (w >= 200 && h >= 200) return true;
     }
     return false;
   }
 
   function observeResults(item) {
-    const observer = new MutationObserver(() => {
-      document.querySelectorAll("video, img").forEach(media => {
-        const url = media.src || media.currentSrc;
-        if (!url || downloadUrls.has(url)) return;
+    if (config.autoDownload === false) { log("Automatic download disabled"); return; }
+    let downloaded = 0;
+    const inFlight = new Set();
+    const failures = new Map();
+    const before = new Set(mediaBefore);
+    const wantsImage = config.mode === "text2image" || config.mode === "image2image" ||
+      (config.mode === "agent" && config.agentOutput !== "video");
+    const expected = Math.max(1, parseInt(config.outputCount, 10) || 1);
+    const stopAt = Date.now() + 20 * 60 * 1000;
+    const check = () => {
+      if (Date.now() > stopAt || downloaded >= expected || stopped) {
+        if (Date.now() > stopAt && downloaded < expected) {
+          logError("Generated media was not found for download:", "item=" + item.id,
+            "downloaded=" + downloaded, "expected=" + expected);
+        }
+        clearInterval(timer);
+        return;
+      }
+      findGeneratedMedia().forEach(media => {
+        const url = media.currentSrc || media.src;
+        if (!url || before.has(url) || downloadUrls.has(url) || inFlight.has(url) ||
+            (failures.get(url) || 0) >= 2 ||
+            downloaded + inFlight.size >= expected) return;
+        if (wantsImage && media.tagName !== "IMG") return;
+        if (!wantsImage && media.tagName !== "VIDEO" && media.tagName !== "IMG") return;
         if (!shouldDownloadMedia(url, media)) return;
-        downloadUrls.add(url);
-        autoDownload(url, item);
+        inFlight.add(url);
+        autoDownload(url, item, wantsImage, media).then(ok => {
+          inFlight.delete(url);
+          if (ok) { downloadUrls.add(url); downloaded++; }
+          else failures.set(url, (failures.get(url) || 0) + 1);
+        });
       });
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    };
+    // Flow can update src/currentSrc on an existing node, including in Shadow
+    // DOM. Polling also catches results rendered before an observer attaches.
+    const timer = setInterval(check, 1500);
+    check();
   }
 
-  async function autoDownload(url, item) {
-    const isImage = /\.(png|jpg|jpeg|webp)$/i.test(url.split("?")[0]) || /image/i.test(item.text || "");
+  async function autoDownload(url, item, isImage, media) {
     const targetRes = isImage ? (config.imageRes || "2k").toLowerCase() : (config.videoRes || "1080p").toLowerCase();
     const skip = isImage && targetRes === "none";
-    if (skip) { log("Image download skipped (configured: none)"); return; }
-    let finalUrl = await trySelectResolution(url, isImage, targetRes);
+    if (skip) { log("Image download skipped (configured: none)"); return true; }
+    const finalUrl = url;
     const folder = config.folder || "veo-folder-1";
-    const safeFolder = folder.replace(/[\\/:*?"<>|]/g, "_").trim() || "veo-folder-1";
-    let filename = (finalUrl || url).split("/").pop().split("?")[0] || `flow-${item.id}`;
+    const safeFolder = folder.split(/[\\/]+/).map(part => part.replace(/[:*?"<>|]/g, "_").trim())
+      .filter(part => part && part !== "." && part !== "..").join("/") || "veo-folder-1";
+    const ext = isImage ? "png" : "mp4";
+    let filename = (finalUrl || url).split("/").pop().split("?")[0] || `flow-${item.id + 1}.${ext}`;
+    filename = filename.replace(/[\\/:*?"<>|]/g, "_");
+    if (isImage ? !/\.(?:png|jpe?g|webp|gif)$/i.test(filename) : !/\.(?:mp4|webm)$/i.test(filename)) {
+      filename = filename.replace(/\.[^.]+$/, "") + `.${ext}`;
+    }
     if (config.rename) {
-      const ext = filename.split(".").pop() || (isImage ? "png" : "mp4");
-      filename = `${safeFolder}/${item.id + 1}.${ext}`;
+      filename = `${safeFolder}/${item.id + 1}.${filename.split(".").pop()}`;
     } else {
       filename = `${safeFolder}/${filename}`;
     }
-    try {
-      await fetch(finalUrl || url)
-        .then(r => r.blob())
-        .then(blob => {
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = filename;
-          a.dataset.download = "true";
-          a.click();
-          URL.revokeObjectURL(a.href);
-          log("Downloaded:", filename);
-        });
-    } catch (e) { log("Download failed:", e.message); }
+    const task = qualityDownloadLock.then(() => downloadAtFlowQuality(media, targetRes, isImage, filename));
+    qualityDownloadLock = task.catch(() => {});
+    try { return await task; }
+    catch (e) { logError("Download failed:", filename, e); return false; }
   }
 
-  async function trySelectResolution(url, isImage, res) {
-    const candidates = document.querySelectorAll(
-      "[role=menuitem], [role=option], button[aria-haspopup], [class*='quality'], [class*='res']"
-    );
-    const norm2 = (s) => String(s || "").toLowerCase().trim();
-    for (const el of candidates) {
-      const label = norm2(el.getAttribute("aria-label") || el.textContent);
-      if (!label) continue;
-      const isMatch = (!isImage && (label === res || label.startsWith(res))) ||
-        (isImage && (label === res || label === res + " resolution"));
-      if (isMatch && !/disabled/i.test(el.getAttribute("aria-disabled") || "")) {
-        try { el.click(); log("Resolution option clicked:", res); await sleep(800); return url; } catch (e) {}
-        break;
+  async function downloadAtFlowQuality(media, quality, isImage, filename) {
+    const labelOf = el => ((el.textContent || "") + " " + (el.getAttribute("aria-label") || "") +
+      " " + (el.getAttribute("title") || "")).replace(/\s+/g, " ").trim();
+    const visible = el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 20 && r.height > 10;
+    };
+    const waitFor = async (predicate, tries = 10) => {
+      for (let i = 0; i < tries; i++) {
+        const found = queryAllVisible(document).filter(el => visible(el) && predicate(labelOf(el), el));
+        if (found.length) return found.sort((a, b) => {
+          const ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+          const aInteractive = a.matches("button, [role='button'], [role='menuitem'], [role='option']") ? 1 : 0;
+          const bInteractive = b.matches("button, [role='button'], [role='menuitem'], [role='option']") ? 1 : 0;
+          return bInteractive - aInteractive || ar.width * ar.height - br.width * br.height;
+        })[0];
+        await sleep(350);
       }
+      return null;
+    };
+    const menuRe = /^(?:more_vert|more_horiz|more|更多|更多選項|更多选项)$/i;
+    let node = media;
+    let trigger = null;
+    for (let depth = 0; node && depth < 12; depth++) {
+      node = node.parentElement || node.getRootNode?.().host;
+      if (!node) break;
+      const buttons = queryAllVisible(node).filter(el => visible(el) &&
+        el.matches("button, [role='button']") &&
+        [el.textContent, el.getAttribute("aria-label"), el.getAttribute("title")]
+          .some(value => menuRe.test(String(value || "").trim())));
+      if (buttons.length) { trigger = buttons[0]; break; }
     }
-    if (/size=|resolution=|quality=/.test(url)) {
-      const key = /size=/.test(url) ? "size" : /resolution=/.test(url) ? "resolution" : "quality";
-      const replaced = url.replace(new RegExp(`([?&]${key}=)[^&]*`), `$1${encodeURIComponent(res)}`);
-      if (replaced !== url) return replaced;
+    if (!trigger) throw new Error("Flow result card menu was not found");
+    click(trigger);
+    const downloadMenu = await waitFor(label => /^(?:download\s*)?(?:下載|下载|download)(?:\s|$)/i.test(label));
+    if (!downloadMenu) throw new Error("Flow result card Download menu was not found");
+    downloadMenu.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    downloadMenu.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+    downloadMenu.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    const qualityRe = new RegExp("^" + quality.replace(/[^a-z0-9]/gi, "") + "(?=$|[^a-z0-9])", "i");
+    let option = await waitFor(label => qualityRe.test(label), 4);
+    if (!option) {
+      click(downloadMenu);
+      option = await waitFor(label => qualityRe.test(label));
     }
-    return url;
+    if (!option) throw new Error("Flow download quality option not found: " + quality);
+    let disabled = option.disabled || option.getAttribute("aria-disabled") === "true";
+    for (let el = option; el && el !== document.body; el = el.parentElement) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 100 || r.width > 400) break;
+      const style = getComputedStyle(el);
+      if (el.disabled || el.getAttribute("aria-disabled") === "true" ||
+          /\bdisabled\b/i.test(String(el.className || "")) ||
+          style.pointerEvents === "none" || parseFloat(style.opacity) < 0.6 ||
+          (quality === "4k" && /升級|升级|upgrade/i.test(el.textContent || "") &&
+            r.width < 240 && r.height < 90)) { disabled = true; break; }
+    }
+    if (disabled) throw new Error("Flow download quality is unavailable for this account: " + quality);
+
+    const token = Date.now() + "-" + Math.random().toString(36).slice(2);
+    const registered = await chrome.runtime.sendMessage({
+      type: "REGISTER_FLOW_DOWNLOAD", token, filename, kind: isImage ? "image" : "video",
+    });
+    if (!registered?.ok) throw new Error(registered?.error || "Could not register Flow download");
+    let timer;
+    const started = new Promise(resolve => {
+      qualityDownloadWaiters.set(token, resolve);
+      timer = setTimeout(() => resolve(null), 15 * 60 * 1000);
+    });
+    try {
+      click(option);
+      const result = await started;
+      if (!result) throw new Error("Flow did not start the selected " + quality + " download");
+      log("Flow quality download started:", quality, result.filename, "id=" + result.id);
+      return true;
+    } finally {
+      clearTimeout(timer);
+      qualityDownloadWaiters.delete(token);
+      chrome.runtime.sendMessage({ type: "CANCEL_FLOW_DOWNLOAD", token }).catch(() => {});
+    }
+  }
+
+  async function fallbackDownload(url, filename) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const blob = await response.blob();
+    if (!blob.size) throw new Error("Empty media file");
+    const objectUrl = URL.createObjectURL(blob);
+    const registered = await chrome.runtime.sendMessage({ type: "REGISTER_BLOB_DOWNLOAD", url: objectUrl, filename });
+    if (!registered?.ok) throw new Error(registered?.error || "Could not register download filename");
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = filename.split("/").pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10 * 60 * 1000);
+    log("Download started:", filename, "(blob fallback)");
   }
 
   // Main batch loop
@@ -2161,7 +2364,6 @@
       "charEnabled=", config.charEnabled, "defaultChar=", config.defaultChar,
       "charNames=", JSON.stringify(config.charNames || []),
       "charSelected=", JSON.stringify(config.charSelected || []),
-      "materialEnabled=", config.materialEnabled,
       "materialNames=", JSON.stringify(config.materialNames || []));
     if (config.chainEnabled) {
       log("Chain Prompt enabled — processing sequentially, each item uses the previous video's last frame.");
@@ -2197,7 +2399,6 @@
   async function processOne(item) {
     if (stopped) throw new Error("stopped");
     reportItemStatus(item.id, "running");
-    mediaBefore = snapshotMedia();
     // Diagnostics on first item
     if (item.id === 0) {
       log("[Config] mode=", config.mode, "aspect=", config.aspect, "model=", config.model,
@@ -2208,7 +2409,7 @@
       dumpPageElements();
       validateAndFixMode();
       if (config.charEnabled && !(config.charNames || []).length) autoScanCharacters();
-      if (!(config.materialNames || []).length) autoScanMaterials();
+      if (!(config.materialNames || []).length && /@[A-Za-z0-9_\-\u4e00-\u9fff]/.test(item.text || "")) autoScanMaterials();
       log("[After-fix] mode=", config.mode, "charNames=", JSON.stringify(config.charNames), "materialNames=", JSON.stringify(config.materialNames || []));
       // 警示：如果 config 有影片設定（model/aspect/duration）但模式是圖片，提示使用者
       const isImageMode = config.mode === "text2image" || config.mode === "image2image";
@@ -2262,18 +2463,32 @@
     log("Prompt input:", textarea.tagName, "ce=" + textarea.isContentEditable, "placeholder=" + JSON.stringify(textarea.getAttribute("placeholder") || ""));
     textarea.focus();
     await sleep(200);
-    setNativeValue(textarea, cleanPromptText(item.text));
+    const promptText = config.mode === "agent" ? buildAgentPrompt(item.text) : cleanPromptText(item.text);
+    setNativeValue(textarea, promptText);
     await sleep(500);
-    verifyPromptFill(textarea, item.text);
+    verifyPromptFill(textarea, promptText);
 
     // Auto character / voice
     // 角色和圖像都只能經由提示詞旁的 + 選擇器加入；直接點頁面角色卡會切到角色生成頁。
     log("Characters and images will be added through the prompt (+) picker");
     tryAutoVoice(item.text);
 
+    function buildAgentPrompt(text) {
+      const target = config.agentOutput === "video" ? "建立影片" : "建立圖片";
+      const withoutConflictingTarget = cleanPromptText(text)
+        .replace(/(?:請\s*)?建立\s*(?:圖片|图片|影片|视频)/g, "")
+        .replace(/\s{2,}/g, " ").trim();
+      return "請使用 Google Flow Agent " + target + "。\n\n" + withoutConflictingTarget;
+    }
+
     // Set options
     await sleep(800);
     const isImageMode = config.mode === "text2image" || config.mode === "image2image";
+    const isAgentMode = config.mode === "agent";
+    if (isAgentMode) {
+      if (!await enableAgentMode()) throw new Error("Flow composer Agent button not found");
+      await sleep(600);
+    } else {
     // 點擊模型選擇器按鈕開啟設定面板（如 "🍌 Nano Banana 2..."）
     let panelOpened = await openModelPanel();
     if (panelOpened) {
@@ -2284,14 +2499,16 @@
       const targetMode = isImageMode ? "image" : "video";
       const modeBefore = detectFlowMode();
       if (!await ensureOutputMode(targetMode)) throw new Error("Flow output mode could not be selected: " + targetMode);
-      // Switching creation type often dismisses the settings popover. Reopen it
-      // before touching model, ratio, and output controls.
-      if (modeBefore !== targetMode) {
-        const outputOptions = queryAllVisible(document).some(el => /^x[1-4]$/i.test((el.textContent || "").trim()));
-        if (!outputOptions) {
-          panelOpened = await openModelPanel();
-          if (!panelOpened) throw new Error("Flow settings panel did not reopen after mode switch");
+      // Switching creation type can keep the settings panel open. The output
+      // count is labelled "x 1" in Flow, so it cannot determine panel state.
+      // Clicking the composer selector while open closes the panel.
+      if (!isSettingsPanelOpen(targetMode)) {
+        panelOpened = await openModelPanel();
+        if (!panelOpened || !isSettingsPanelOpen(targetMode)) {
+          throw new Error("Flow settings panel did not open after mode switch");
         }
+      } else if (modeBefore !== targetMode) {
+        log("[Panel] Settings panel stayed open after mode switch");
       }
       dumpPanelElements();
       // 切換子頁籤：text2video → 素材，frame2video → 帧
@@ -2340,9 +2557,9 @@
       if (config.imageMode) setImageMode();
       await sleep(300);
     } else {
-      await setModel();
+      if (!await setModel()) throw new Error("Flow model could not be selected");
       await sleep(300);
-      setGenerationResolution();
+      await setGenerationResolution();
       await sleep(300);
     }
     if (!isImageMode) {
@@ -2359,6 +2576,7 @@
       await sleep(800);
       log("[Panel] closed after setting options (image mode)");
     }
+    }
     // 面板選項設定完成後，再加入匹配的角色素材（會打開/關閉 picker）
     await sleep(500);
     if (!await tryAddMatchedAssets(item.text, item)) throw new Error("matched character/image could not be added to prompt");
@@ -2368,12 +2586,12 @@
     const promptEl = findPromptTextarea();
     if (promptEl) {
       const cur = (promptEl.textContent || "").replace(/\s+/g, " ").trim();
-      const want = cleanPromptText(item.text).replace(/\s+/g, " ").trim();
+      const want = promptText.replace(/\s+/g, " ").trim();
       if (cur.length === 0 || (want.length > 0 && !cur.includes(want.slice(0, 30)))) {
         log("[Submit] prompt empty/lost before submit, re-filling...");
-        setNativeValue(promptEl, cleanPromptText(item.text));
+        setNativeValue(promptEl, promptText);
         await sleep(600);
-        verifyPromptFill(promptEl, item.text);
+        verifyPromptFill(promptEl, promptText);
       } else {
         log("[Submit] prompt present before submit, len=" + cur.length);
       }
@@ -2385,10 +2603,15 @@
       submit = findSubmitButton(isImageMode);
     }
     if (!submit) throw new Error("submit button not found");
-    const finalMode = detectFlowMode();
-    if (finalMode !== (isImageMode ? "image" : "video")) {
-      throw new Error("Flow creation mode changed before submit: " + (finalMode || "unknown"));
+    if (!isAgentMode) {
+      const finalMode = detectFlowMode();
+      if (finalMode !== (isImageMode ? "image" : "video")) {
+        throw new Error("Flow creation mode changed before submit: " + (finalMode || "unknown"));
+      }
     }
+    // Baseline after uploads and picker work, immediately before generation.
+    // Otherwise uploaded reference images can be mistaken for new results.
+    mediaBefore = snapshotMedia();
     click(submit);
     log("Submitted item", item.id);
 

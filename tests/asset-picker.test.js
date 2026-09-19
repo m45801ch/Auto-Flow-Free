@@ -6,7 +6,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'flow-automation.js'),
 const match = source.match(/  async function tryAddMatchedAssets\(text, state = null\) \{[\s\S]*?\n  \}\n\n  \/\/ Frame handling/);
 assert.ok(match, 'asset picker function exists');
 const implementation = match[0].replace(/\n\n  \/\/ Frame handling$/, '');
-const resolutionMatch = source.match(/  function setGenerationResolution\(\) \{[\s\S]*?\n  \}\n\n  \/\/ --------------- Add matched assets/);
+const resolutionMatch = source.match(/  async function setGenerationResolution\(\) \{[\s\S]*?\n  \}\n\n  \/\/ --------------- Add matched assets/);
 assert.ok(resolutionMatch, 'generation resolution function exists');
 const resolutionImplementation = resolutionMatch[0].replace(/\n\n  \/\/ --------------- Add matched assets$/, '');
 const markedMatch = source.match(/  function markedNameInText\(text, name\) \{[\s\S]*?\n  \}\n  function charsInText/);
@@ -130,17 +130,11 @@ async function run(charNames, imageNames, missingImage = false, plainPortal = fa
   assert.equal(markedNameInText('畫面有 @小美 和 @海邊.png', '海邊'), true);
   assert.equal(markedNameInText('畫面有 @小美 和海邊', '海邊'), false);
   assert.equal(markedNameInText('@Anna2', 'Anna'), false);
-  const materialsInText = new Function('config', 'normBase', 'markedNameInText', 'charHitInContext', 'tokensSubset',
+  const materialsInText = new Function('config', 'markedNameInText',
     materialsImplementation + '\nreturn materialsInText;')(
-    { materialEnabled: true, materialSelected: ['舊圖片'], materialNames: ['海邊', '天空'] },
-    s => String(s || '').replace(/_/g, ' ').toLowerCase(), markedNameInText, () => false, () => false);
+    { materialNames: ['海邊', '天空'] }, markedNameInText);
   assert.deepEqual(materialsInText('請加入 @天空'), ['天空']);
-  const explicitMaterials = new Function('config', 'normBase', 'markedNameInText', 'charHitInContext', 'tokensSubset',
-    materialsImplementation + '\nreturn materialsInText;')(
-    { materialEnabled: false, materialNames: ['海邊', '天空'] },
-    s => String(s || '').replace(/_/g, ' ').toLowerCase(), markedNameInText, () => false, () => false);
-  assert.deepEqual(explicitMaterials('請加入 @天空'), ['天空']);
-  assert.deepEqual(explicitMaterials('請加入天空'), []);
+  assert.deepEqual(materialsInText('請加入天空'), []);
   const good = await run(['小美'], ['海邊']);
   assert.equal(good.result, true);
   assert.deepEqual(good.events, ['+', '角色頁籤', '小美', '確認', '+', '圖像頁籤', '海邊.png', '確認']);
@@ -178,10 +172,10 @@ async function run(charNames, imageNames, missingImage = false, plainPortal = fa
   const clicked = [];
   const option = element('720p');
   option.matches = () => true;
-  const resolution = new Function('config', 'queryAllVisible', 'document', 'click', 'log',
+  const resolution = new Function('config', 'queryAllVisible', 'document', 'click', 'sleep', 'log',
     resolutionImplementation + '\nreturn setGenerationResolution;')(
-    { generationRes: '720p' }, () => [option], {}, el => clicked.push(el.textContent), () => {});
-  resolution();
+    { generationRes: '720p' }, () => [option], {}, el => clicked.push(el.textContent), async () => {}, () => {});
+  await resolution();
   assert.deepEqual(clicked, ['720p']);
 
   // Confirm-button matcher must recognize the character-preview-card confirm,

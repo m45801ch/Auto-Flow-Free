@@ -14,7 +14,7 @@ const buttons = {
 const sent = [];
 let running = false;
 const settings = {
-  mode: 'text2video', materialEnabled: true, materialNames: [],
+  mode: 'text2video', materialNames: [],
   materialSelected: [], waitMin: 0, waitMax: 0,
 };
 const queue = [{ id: 0, text: 'A plain video prompt', status: 'pending' }];

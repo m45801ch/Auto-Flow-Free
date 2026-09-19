@@ -244,6 +244,16 @@ input[type="number"] { text-align: center; }
   border-radius: 6px; border: 1px solid var(--card-border);
 }
 
+/* Agent creation target */
+.agent-output-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.agent-output-btn {
+  min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--card-border); border-radius: 8px; background: var(--input-bg);
+  color: var(--text); cursor: pointer; font: 600 13px var(--font); transition: .15s;
+}
+.agent-output-btn:hover { border-color: var(--accent); color: var(--accent); }
+.agent-output-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
 /* Prompts */
 .prompts-card { display: flex; flex-direction: column; }
 .card-actions { display: flex; gap: 8px; margin-bottom: 10px; }
@@ -684,7 +694,7 @@ textarea#prompts {
 .topbtn:focus-visible, .small-btn:focus-visible, .link-btn:focus-visible,
 .bottom-btn:focus-visible, .save-btn:focus-visible, .debug-btn:focus-visible,
 .icon-btn:focus-visible, .tab:focus-visible, .chip:focus-visible,
-.warn-btn:focus-visible, .notflow-btn:focus-visible, .mode-btn:focus-visible {
+.warn-btn:focus-visible, .notflow-btn:focus-visible, .mode-btn:focus-visible, .agent-output-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

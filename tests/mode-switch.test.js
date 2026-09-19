@@ -9,6 +9,21 @@ const switchCode = switchMatch[0].replace(/\n\n  function setAspect$/, '');
 const detectMatch = source.match(/  function detectFlowMode\(\) \{[\s\S]*?\n  \}\n\n  function validateAndFixMode/);
 assert.ok(detectMatch, 'Flow mode detector exists');
 const detectCode = detectMatch[0].replace(/\n\n  function validateAndFixMode$/, '');
+const panelMatch = source.match(/  function isSettingsPanelOpen\(kind\) \{[\s\S]*?\n  \}\n\n  async function setModel/);
+assert.ok(panelMatch, 'settings panel state is detected before toggling it');
+const panelCode = panelMatch[0].replace(/\n\n  async function setModel$/, '');
+function panelOpen(labels, kind = 'video') {
+  const elements = labels.map(label => ({
+    textContent: label,
+    getBoundingClientRect: () => ({ width: 280, height: 34 }),
+  }));
+  return new Function('queryAllVisible', 'document', panelCode + '\nreturn isSettingsPanelOpen;')(
+    () => elements, {}) (kind);
+}
+assert.equal(panelOpen(['Veo 3.1 - Lite arrow_drop_down', 'x 1']), true);
+assert.equal(panelOpen(['影片 · 720p · 8 秒 crop_16_9 x 1']), false);
+assert.equal(panelOpen(['🍌 Nano Banana 2 arrow_drop_down', 'x 1'], 'image'), true);
+assert.equal(panelOpen(['Nano Banana 2 arrow_drop_down', 'x 1'], 'image'), true);
 
 function option(label, change) {
   return {
