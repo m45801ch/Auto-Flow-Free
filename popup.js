@@ -31,9 +31,6 @@ const i18n = {
     hintCharacter: "當提示詞中提及角色時，自動選擇對應角色。",
     toggleMaterial: "自動新增素材 (Google Flow 素材庫)",
     hintMaterial: "當提示詞中提及素材時，自動選擇對應素材加入提示詞。",
-    labelMaterialMulti: "掃描到的素材（多選）",
-    hintMaterialScan: "尚未掃描任何素材。掃描時會自動切到 Flow「圖像」分頁，列出已上傳與已生成的圖片供選取。",
-    btnScanMaterials: "掃描素材",
     labelDefaultChar: "預設角色",
     labelCharMulti: "掃描到的角色（多選）",
     hintCharScan: "尚未掃描任何角色。請先在 Google Flow 專案中建立角色，然後點選「掃描角色」，即可列出角色供選取。",
@@ -182,8 +179,6 @@ const i18n = {
     scanAutoMatchedCount: "已自動匹配 %N% 個角色，下方列出各段提示詞命中的角色：",
     toastNotFlowAutoChar: "目前不在 Flow 頁面，自動新增角色無法掃描，已切換回手動模式。請在 Flow 頁面開啟。",
     scanFound: "已掃描到 %N% 個角色，已顯示在上方清單供選取。提示詞提到角色名稱時也會依檔名自動匹配圖片。",
-    scanMaterialNone: "未找到素材。請先在 Google Flow 素材庫中準備素材後重新掃描。",
-    scanMaterialFound: "已掃描到 %N% 個素材，已顯示在上方清單供選取。提示詞提到素材名稱時會自動加入提示詞。",
     toastAlreadyRunning: "正在執行中",
     toastPreviewCleared: "預覽與斷點已清除",
 
@@ -228,9 +223,6 @@ const i18n = {
     hintCharacter: "Automatically select the character when it is mentioned in a prompt.",
     toggleMaterial: "Auto-add materials (Google Flow library)",
     hintMaterial: "Automatically select matching materials and add them to the prompt when mentioned.",
-    labelMaterialMulti: "Scanned materials (multi-select)",
-    hintMaterialScan: "No materials scanned yet. Scanning auto-switches to the Flow Images tab and lists uploaded and generated images.",
-    btnScanMaterials: "Scan materials",
     labelDefaultChar: "Default character",
     labelCharMulti: "Scanned characters (multi-select)",
     hintCharScan: "No characters scanned yet. Create characters in your Flow project first, then click \"Scan characters\" to list them for selection.",
@@ -382,8 +374,6 @@ const i18n = {
     stopped: "Batch processing stopped.",
     scanNone: "No characters found. Open your Flow project, create characters, then scan again; names mentioned in prompts are also auto-matched by file name.",
     scanFound: "Scanned %N% characters, listed above for selection. Names mentioned in prompts are also auto-matched by file name.",
-    scanMaterialNone: "No materials found. Prepare materials in your Flow library, then scan again.",
-    scanMaterialFound: "Scanned %N% materials, listed above for selection. Names mentioned in prompts are added to the prompt automatically.",
     scanAutoMatched: "Auto-matched (characters mentioned in prompts are selected automatically; no scan needed).",
     scanAutoMatchedCount: "Auto-matched %N% characters; matched characters per prompt segment are listed below:",
     toastNotFlowAutoChar: "Not on a Flow page; auto-add characters cannot scan and was switched to manual mode. Please turn it on in the Flow page.",
@@ -430,9 +420,6 @@ const i18n = {
     hintCharacter: "当提示词中提及角色时，自动选择对应角色。",
     toggleMaterial: "自动新增素材 (Google Flow 素材库)",
     hintMaterial: "当提示词中提及素材时，自动选择对应素材加入提示词。",
-    labelMaterialMulti: "扫描到的素材（多选）",
-    hintMaterialScan: "尚未扫描任何素材。扫描时会自动切到 Flow「图像」分页，列出已上传与已生成的图片供选取。",
-    btnScanMaterials: "扫描素材",
     labelDefaultChar: "默认角色",
     labelCharMulti: "扫描到的角色（多选）",
     hintCharScan: "尚未扫描任何角色。请先在 Google Flow 项目中创建角色，然后点击「扫描角色」，即可列出角色供选取。",
@@ -584,8 +571,6 @@ const i18n = {
     stopped: "已停止批量处理。",
     scanNone: "未找到角色。请先在 Google Flow 项目中打开并创建角色后重新扫描；提示词中提到的角色名称会依文件名自动匹配图片。",
     scanFound: "已扫描到 %N% 个角色，已显示在上方清单供选取。提示词中提到的角色名称也会依文件名自动匹配图片。",
-    scanMaterialNone: "未找到素材。请先在 Google Flow 素材库中准备素材后重新扫描。",
-    scanMaterialFound: "已扫描到 %N% 个素材，已显示在上方清单供选取。提示词提到素材名称时会自动加入提示词。",
     scanAutoMatched: "已自动匹配（提示词中提到的角色将自动选择对应图片，无须扫描）。",
     scanAutoMatchedCount: "已自动匹配 %N% 个角色，下方列出各段提示词命中的角色：",
     toastNotFlowAutoChar: "目前不在 Flow 页面，自动新增角色无法扫描，已切换回手动模式。请在 Flow 页面开启。",
@@ -1052,8 +1037,6 @@ function loadSettings() {
     charSelected: [],
     defaultChar: "",
     materialEnabled: false,
-    materialSelected: [],
-    materialMap: {},
     maxImages: 2,
     charImageEnabled: false,
     voiceEnabled: false,
@@ -1343,22 +1326,15 @@ function bindUI() {
   document.getElementById("scanChars").addEventListener("click", scanCharacters);
   updateCharScanState();
 
-  // Material toggle & scan (mirrors character flow)
+  // Material matching; explicit @ names also work when this toggle is off.
   const materialToggle = document.getElementById("materialToggle");
   if (materialToggle) {
     materialToggle.checked = settings.materialEnabled;
     materialToggle.addEventListener("change", () => {
       settings.materialEnabled = materialToggle.checked;
       saveSettings();
-      updateMaterialScanState();
-      if (settings.materialEnabled) scanMaterials();
     });
   }
-  const scanMatBtn = document.getElementById("scanMaterials");
-  if (scanMatBtn) scanMatBtn.addEventListener("click", scanMaterials);
-  const materialSel = document.getElementById("materialSelect");
-  if (materialSel) materialSel.addEventListener("change", onMaterialSelectMultiChange);
-  updateMaterialScanState();
 
   // Agent auto-generate toggle (shortcut for agent mode)
   const agentToggle = document.getElementById("agentToggle");
@@ -2750,7 +2726,7 @@ async function doAutoCharScan() {
   }
 }
 
-// ---------------- Material scan + multi-select (mirrors character flow) ----------------
+// ---------------- Background material scan for prompt matching ----------------
 let materialScanPending = null;
 async function scanMaterials(flowTab) {
   if (materialScanPending) return materialScanPending;
@@ -2776,133 +2752,15 @@ async function scanMaterialsImpl(flowTab) {
       dedup.push({ name: String(c.name).trim(), src: c.src || "" });
     });
     persistMaterialResult(dedup);
-    const select = document.getElementById("materialSelect");
-    select.innerHTML = '<option value="" data-i18n="optCharNone">' + t("optCharNone") + '</option>';
-    dedup.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.name;
-      opt.textContent = c.name;
-      if (c.src) opt.dataset.materialImg = c.src;
-      select.appendChild(opt);
-    });
-    const hint = document.getElementById("materialHint");
-    if (dedup.length === 0) {
-      hint.textContent = t("hintMaterialScan");
-      toast(t("scanMaterialNone"));
-      renderMaterialMultiList([]);
-    } else {
-      hint.textContent = t("scanMaterialFound", dedup.length);
-      toast(t("scanMaterialFound", dedup.length));
-      renderMaterialMultiList(dedup);
-    }
     return dedup;
   } catch (err) {
-    toast(t("toastScanFail", err.message));
     return null;
   }
 }
 
 function persistMaterialResult(dedup) {
   settings.materialNames = dedup.map(c => c.name);
-  settings.materialMap = {};
-  dedup.filter(c => c.src).forEach(c => { settings.materialMap[c.name] = c.src; });
   saveSettings();
-  updateMaterialScanState();
-}
-
-function renderMaterialMultiList(mats) {
-  const card = document.getElementById("materialMultiCard");
-  const list = document.getElementById("materialMultiList");
-  if (!list) return;
-  if (!settings.materialSelected || !Array.isArray(settings.materialSelected)) settings.materialSelected = [];
-  if (!mats || mats.length === 0) {
-    if (card) card.classList.add("hidden");
-    return;
-  }
-  if (card) card.classList.remove("hidden");
-  list.innerHTML = "";
-  mats.forEach(c => {
-    const checked = settings.materialSelected.includes(c.name);
-    const item = document.createElement("label");
-    item.className = "char-multi-item";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.className = "char-multi-cb";
-    cb.value = c.name;
-    cb.checked = checked;
-    cb.disabled = !!settings.materialEnabled;
-    cb.addEventListener("change", () => {
-      const names = Array.from(list.querySelectorAll("input[type='checkbox']")).filter(i => i.checked).map(i => i.value);
-      settings.materialSelected = names;
-      saveSettings();
-      syncMaterialSelectFromMulti(names);
-    });
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = c.name;
-    item.appendChild(cb);
-    item.appendChild(nameSpan);
-    if (c.src) {
-      const img = document.createElement("img");
-      img.src = c.src;
-      img.alt = c.name;
-      img.className = "char-multi-thumb";
-      item.appendChild(img);
-    }
-    list.appendChild(item);
-  });
-  syncMaterialSelectFromMulti(settings.materialSelected);
-}
-
-function syncMaterialSelectFromMulti(names) {
-  const sel = document.getElementById("materialSelect");
-  if (!sel) return;
-  Array.from(sel.options).forEach(o => {
-    o.selected = !!(o.value && o.value !== "__none__" && names.includes(o.value));
-  });
-}
-
-function onMaterialSelectMultiChange() {
-  const sel = document.getElementById("materialSelect");
-  const list = document.getElementById("materialMultiList");
-  if (!sel) return;
-  const names = Array.from(sel.selectedOptions).map(o => o.value).filter(v => v && v !== "__none__");
-  settings.materialSelected = names;
-  saveSettings();
-  if (list) {
-    list.querySelectorAll("input[type='checkbox']").forEach(cb => {
-      cb.checked = names.includes(cb.value);
-    });
-  }
-}
-
-// 自動新增素材時仍可重新掃描圖像庫。
-function updateMaterialScanState() {
-  const btn = document.getElementById("scanMaterials");
-  const hint = document.getElementById("materialHint");
-  const sel = document.getElementById("materialSelect");
-  const multiList = document.getElementById("materialMultiList");
-  if (!btn || !hint) return;
-  const span = btn.querySelector("span");
-  if (settings.materialEnabled) {
-    btn.disabled = false;
-    btn.classList.remove("disabled");
-    if (span) span.textContent = t("btnScanMaterials");
-    hint.textContent = (settings.materialNames || []).length
-      ? t("scanMaterialFound", settings.materialNames.length) : t("hintMaterialScan");
-    if (sel) { sel.disabled = true; sel.classList.add("disabled"); }
-    if (multiList) {
-      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = true; });
-    }
-  } else {
-    btn.disabled = false;
-    btn.classList.remove("disabled");
-    if (span) span.textContent = t("btnScanMaterials");
-    hint.textContent = t("hintMaterialScan");
-    if (sel) { sel.disabled = false; sel.classList.remove("disabled"); }
-    if (multiList) {
-      multiList.querySelectorAll("input[type='checkbox']").forEach(cb => { cb.disabled = false; });
-    }
-  }
 }
 
 // 自動匹配模式下，各段 prompt 命中角色的顯示清單（含縮圖，跟每段秒數面板一致）
@@ -3097,7 +2955,7 @@ async function detectNotFlow() {
   return !bgReplied;
 }
 
-// 點擊縮圖放大（角色/素材多選清單＋自動匹配 chips 共用；動態列表用委派）
+// 點擊角色縮圖放大（角色多選清單＋自動匹配 chips 共用；動態列表用委派）
 function openImageLightbox(src, alt) {
   closeImageLightbox();
   const ov = document.createElement("div");
@@ -3288,11 +3146,7 @@ async function startBatch(resumeIndex) {
         .map(o => o.value)
         .filter(v => v && v !== "__none__")),
     materialEnabled: settings.materialEnabled,
-    materialSelected: Array.isArray(settings.materialSelected) ? settings.materialSelected : [],
-    materialNames: (settings.materialNames && settings.materialNames.length ? settings.materialNames :
-      Array.from(document.getElementById("materialSelect")?.options || [])
-        .map(o => o.value)
-        .filter(v => v && v !== "__none__")),
+    materialNames: settings.materialNames || [],
     lang: currentLang,
   };
 

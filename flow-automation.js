@@ -2162,8 +2162,7 @@
       "charNames=", JSON.stringify(config.charNames || []),
       "charSelected=", JSON.stringify(config.charSelected || []),
       "materialEnabled=", config.materialEnabled,
-      "materialNames=", JSON.stringify(config.materialNames || []),
-      "materialSelected=", JSON.stringify(config.materialSelected || []));
+      "materialNames=", JSON.stringify(config.materialNames || []));
     if (config.chainEnabled) {
       log("Chain Prompt enabled — processing sequentially, each item uses the previous video's last frame.");
     }
